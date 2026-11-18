@@ -87,9 +87,10 @@ const maxMetaBytes = 1 << 20
 
 // payload is what the child hands back to the parent.
 type payload struct {
-	Report       *facts.Report  `json:"report"`
-	Shards       []*facts.Shard `json:"shards"`
-	NotEvaluated []string       `json:"not_evaluated"`
+	Report       *facts.Report   `json:"report"`
+	Shards       []*facts.Shard  `json:"shards"`
+	Manifest     *facts.Manifest `json:"manifest"`
+	NotEvaluated []string        `json:"not_evaluated"`
 }
 
 func runCheck(args []string, stdout, stderr io.Writer) int {
@@ -98,7 +99,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	policyPath := fs.String("policy", "", "policy file (default MODULE_DIR/.bedrock/policy.toml)")
 	format := fs.String("format", "json", "output format (json)")
 	outPath := fs.String("out", "", "write the report here instead of stdout")
-	factsDir := fs.String("facts-dir", "", "also write unit shards to DIR/shards/")
+	factsDir := fs.String("facts-dir", "", "also write unit shards to DIR/shards/ and the analysis manifest to DIR/analysis.json")
 	timeout := fs.Duration("timeout", 120*time.Second, "analyzer wall-clock limit (0 < D <= 1h)")
 	memMiB := fs.Int64("mem-limit-mib", 4096, fmt.Sprintf("analyzer memory limit in MiB (%d..%d)", minMemMiB, maxMemMiB))
 	if err := fs.Parse(args); err != nil {
@@ -165,6 +166,12 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 				return 2
 			}
 		}
+		if p.Manifest != nil {
+			if err := os.WriteFile(filepath.Join(*factsDir, "analysis.json"), facts.Marshal(p.Manifest), 0o644); err != nil {
+				fmt.Fprintln(stderr, "bedrock:", err)
+				return 2
+			}
+		}
 	}
 	b := facts.Marshal(p.Report)
 	if *outPath != "" {
@@ -203,7 +210,8 @@ func supervise(dir, label string, timeout time.Duration, memMiB int64, stderr io
 		return nil, kind, msg, m
 	}
 	cmd := exec.Command(exe, childCmd, "--result", result, "--meta", metaPath,
-		"--mem-limit-mib", strconv.FormatInt(memMiB, 10), "--policy", label, dir)
+		"--mem-limit-mib", strconv.FormatInt(memMiB, 10), "--timeout-seconds", strconv.Itoa(int(timeout.Seconds())),
+		"--policy", label, dir)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &errBuf, n: 64 << 10}
 	if err := cmd.Start(); err != nil {
@@ -246,6 +254,7 @@ func childMain(args []string) int {
 	result := fs.String("result", "", "")
 	metaPath := fs.String("meta", "", "")
 	memMiB := fs.Int64("mem-limit-mib", 4096, "")
+	timeoutSeconds := fs.Int("timeout-seconds", 120, "")
 	policyPath := fs.String("policy", "", "")
 	if err := fs.Parse(args); err != nil || *result == "" || fs.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "bedrock: bad child invocation")
@@ -266,7 +275,8 @@ func childMain(args []string) int {
 	if fault == "hang-policy" { // fault during policy acquisition: before the handshake
 		select {}
 	}
-	opts := check.Options{Dir: fs.Arg(0), PolicyPath: *policyPath, PolicyLabel: *policyPath}
+	opts := check.Options{Dir: fs.Arg(0), PolicyPath: *policyPath, PolicyLabel: *policyPath,
+		TimeoutSeconds: max(*timeoutSeconds, 1), MemoryMiB: int(*memMiB)}
 	pr := check.LoadPolicy(opts)
 	if *metaPath != "" {
 		m := policyMeta{SHA256: pr.SHA256, Rules: []ruleIdent{}}
@@ -283,7 +293,7 @@ func childMain(args []string) int {
 	injectFault(fault)
 
 	out := check.RunWithPolicy(contextBackground(), opts, pr)
-	p := payload{Report: out.Report, Shards: out.Shards}
+	p := payload{Report: out.Report, Shards: out.Shards, Manifest: out.Manifest}
 	for _, ru := range out.NotEvaluated {
 		p.NotEvaluated = append(p.NotEvaluated, fmt.Sprintf("rule %q (%s) is NOT EVALUATED by this build (forbid_import only); it is reported INDETERMINATE", ru.ID, ru.Kind))
 	}

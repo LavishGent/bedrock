@@ -1337,10 +1337,52 @@ func (res *Result) attachRoutes(all []*packages.Package, l *locator) {
 			u.Shard.Diagnostics = append(u.Shard.Diagnostics, d.Diag)
 		}
 	}
-	// Normalize every shard: sorted, deduplicated, external symbols.
+	res.Routes = x.routes
+	res.RouteDiags = x.diags
+	sort.SliceStable(res.Routes, func(i, j int) bool { return res.Routes[i].Fact.ID < res.Routes[j].Fact.ID })
+	// Middleware shape of every declared function and method, for policy
+	// validation of middleware concepts.
+	res.MiddlewareShaped = map[string]bool{}
+	for _, p := range all {
+		if p.Types == nil {
+			continue
+		}
+		scope := p.Types.Scope()
+		for _, name := range scope.Names() {
+			switch o := scope.Lookup(name).(type) {
+			case *types.Func:
+				res.MiddlewareShaped[o.FullName()] = isMiddlewareSig(o.Type().(*types.Signature))
+			case *types.TypeName:
+				if n, ok := o.Type().(*types.Named); ok {
+					for i := 0; i < n.NumMethods(); i++ {
+						m := n.Method(i)
+						res.MiddlewareShaped[m.FullName()] = isMiddlewareSig(m.Type().(*types.Signature))
+					}
+				}
+			}
+		}
+	}
+}
+
+// normalizeShards sorts and deduplicates every shard and derives its external
+// symbols (schema README, Shard ownership and referential integrity).
+func (res *Result) normalizeShards() {
+	owner := map[string]string{}
+	for id, u := range res.Units {
+		for _, s := range u.Shard.Symbols {
+			owner[s.ID] = id
+		}
+	}
 	for id, u := range res.Units {
 		sh := u.Shard
 		sort.Slice(sh.Symbols, func(i, j int) bool { return sh.Symbols[i].ID < sh.Symbols[j].ID })
+		sort.Slice(sh.CallSites, func(i, j int) bool {
+			a, b := sh.CallSites[i], sh.CallSites[j]
+			if a.Caller != b.Caller {
+				return a.Caller < b.Caller
+			}
+			return a.Ordinal < b.Ordinal
+		})
 		sort.Slice(sh.Routes, func(i, j int) bool { return sh.Routes[i].ID < sh.Routes[j].ID })
 		sort.Slice(sh.RouteMiddleware, func(i, j int) bool {
 			a, b := sh.RouteMiddleware[i], sh.RouteMiddleware[j]
@@ -1380,36 +1422,19 @@ func (res *Result) attachRoutes(all []*packages.Package, l *locator) {
 		for _, d := range sh.Diagnostics {
 			ref(d.SymbolID)
 		}
+		for _, c := range sh.CallSites {
+			for i := range c.Targets {
+				ref(&c.Targets[i])
+			}
+			if c.Mode == "static" {
+				ref(c.CalleeHint)
+			}
+		}
 		sh.ExternalSymbols = []facts.ExtSymbol{}
 		for sid, ou := range ext {
 			sh.ExternalSymbols = append(sh.ExternalSymbols, facts.ExtSymbol{ID: sid, UnitID: ou})
 		}
 		sort.Slice(sh.ExternalSymbols, func(i, j int) bool { return sh.ExternalSymbols[i].ID < sh.ExternalSymbols[j].ID })
-	}
-	res.Routes = x.routes
-	res.RouteDiags = x.diags
-	sort.SliceStable(res.Routes, func(i, j int) bool { return res.Routes[i].Fact.ID < res.Routes[j].Fact.ID })
-	// Middleware shape of every declared function and method, for policy
-	// validation of middleware concepts.
-	res.MiddlewareShaped = map[string]bool{}
-	for _, p := range all {
-		if p.Types == nil {
-			continue
-		}
-		scope := p.Types.Scope()
-		for _, name := range scope.Names() {
-			switch o := scope.Lookup(name).(type) {
-			case *types.Func:
-				res.MiddlewareShaped[o.FullName()] = isMiddlewareSig(o.Type().(*types.Signature))
-			case *types.TypeName:
-				if n, ok := o.Type().(*types.Named); ok {
-					for i := 0; i < n.NumMethods(); i++ {
-						m := n.Method(i)
-						res.MiddlewareShaped[m.FullName()] = isMiddlewareSig(m.Type().(*types.Signature))
-					}
-				}
-			}
-		}
 	}
 }
 

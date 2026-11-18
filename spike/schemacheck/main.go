@@ -88,37 +88,43 @@ func loadSchemas(dir string) (*schemaSet, error) {
 
 // check validates one document. schemaFile may be empty to pick by kind.
 func (s *schemaSet) check(schemaFile, docPath string) error {
+	_, err := s.validate(schemaFile, docPath)
+	return err
+}
+
+// validate checks one document and returns it decoded.
+func (s *schemaSet) validate(schemaFile, docPath string) (any, error) {
 	f, err := os.Open(docPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	doc, err := jsonschema.UnmarshalJSON(f)
 	f.Close()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if schemaFile == "" {
 		m, _ := doc.(map[string]any)
 		kind, _ := m["kind"].(string)
 		if schemaFile = schemaForKind[kind]; schemaFile == "" {
-			return fmt.Errorf("unknown document kind %q", kind)
+			return nil, fmt.Errorf("unknown document kind %q", kind)
 		}
 	}
 	id, ok := s.ids[schemaFile]
 	if !ok {
-		return fmt.Errorf("no schema %s", schemaFile)
+		return nil, fmt.Errorf("no schema %s", schemaFile)
 	}
 	sch, err := s.c.Compile(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := sch.Validate(doc); err != nil {
-		return fmt.Errorf("schema %s: %w", schemaFile, err)
+		return nil, fmt.Errorf("schema %s: %w", schemaFile, err)
 	}
 	if errs := semantic(doc); len(errs) > 0 {
-		return errors.New("semantic rules (README.md):\n  " + strings.Join(errs, "\n  "))
+		return nil, errors.New("semantic rules (README.md):\n  " + strings.Join(errs, "\n  "))
 	}
-	return nil
+	return doc, nil
 }
 
 func main() {
@@ -132,17 +138,32 @@ func main() {
 		os.Exit(2)
 	}
 	failed := false
+	byKind := map[string][]obj{}
 	for _, arg := range os.Args[2:] {
 		schemaFile, docPath, ok := strings.Cut(arg, "=")
 		if !ok {
 			schemaFile, docPath = "", arg
 		}
-		if err := s.check(schemaFile, docPath); err != nil {
+		doc, err := s.validate(schemaFile, docPath)
+		if err != nil {
 			failed = true
 			fmt.Printf("FAIL %s\n%v\n", docPath, err)
 			continue
 		}
+		if d, ok := doc.(obj); ok {
+			byKind[str(d["kind"])] = append(byKind[str(d["kind"])], d)
+		}
 		fmt.Printf("ok   %s\n", docPath)
+	}
+	// One run's documents together: the merge checks across shards, the
+	// manifest and the report (README: Shard ownership, Recovering Entry).
+	if ms := byKind["analysis_manifest"]; len(ms) == 1 && len(byKind["unit_shard"]) > 0 {
+		if errs := crossCheck(ms[0], byKind["unit_shard"], byKind["report"]); len(errs) > 0 {
+			failed = true
+			fmt.Printf("FAIL run (manifest + %d shards)\n  %s\n", len(byKind["unit_shard"]), strings.Join(errs, "\n  "))
+		} else {
+			fmt.Printf("ok   run (manifest + %d shards, %d reports)\n", len(byKind["unit_shard"]), len(byKind["report"]))
+		}
 	}
 	if failed {
 		os.Exit(1)

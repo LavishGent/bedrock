@@ -27,9 +27,16 @@ type report struct {
 			Reason string `json:"reason"`
 		} `json:"excluded_files"`
 	} `json:"packages"`
-	Status   string `json:"status"`
-	ExitCode int    `json:"exit_code"`
-	Rules    []struct {
+	Status      string `json:"status"`
+	ExitCode    int    `json:"exit_code"`
+	Assumptions []struct {
+		ID            string `json:"id"`
+		ExemptedCount int    `json:"exempted_count"`
+	} `json:"assumptions"`
+	Inputs struct {
+		ManifestSHA256 *string `json:"manifest_sha256"`
+	} `json:"inputs"`
+	Rules []struct {
 		ID, Kind, Status string
 	} `json:"rules"`
 	Violations []struct {
@@ -44,6 +51,8 @@ type report struct {
 	Diagnostics []struct {
 		Kind         string  `json:"kind"`
 		Scope        string  `json:"scope"`
+		ExemptedBy   *string `json:"exempted_by"`
+		SymbolID     *string `json:"symbol_id"`
 		UnitID       *string `json:"unit_id"`
 		Relevance    string  `json:"relevance"`
 		AffectsRules []struct {
@@ -87,6 +96,14 @@ func schemacheck(t *testing.T, docs ...string) {
 	}
 }
 
+// runDocs returns every document of one run (shards, manifest, report), so
+// schemacheck also applies the cross-document merge checks.
+func runDocs(t *testing.T, facts string, raw []byte) []string {
+	t.Helper()
+	docs := append(shardsIn(t, facts), filepath.Join(facts, "analysis.json"), writeReport(t, facts, raw))
+	return docs
+}
+
 func writeReport(t *testing.T, dir string, raw []byte) string {
 	t.Helper()
 	p := filepath.Join(dir, "report.json")
@@ -113,37 +130,36 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// Until step 4 lands, the demo's restrict_concept_to_boundary rule is listed
-// but not evaluated, so the clean demo is INDETERMINATE (exit 2), never PASS;
-// forbid_import and require_middleware (step 3) pass.
+// Step 4: all three rules are evaluated and the clean demo passes (exit 0).
+// The decision A assumptions are listed with counts that reconcile with the
+// exempted diagnostics.
 func TestDemoClean(t *testing.T) {
 	code, raw, facts := run(t, "--policy", repoPolicy, "../../demo/clean")
 	r := decode(t, raw)
-	if code != 2 || r.Status != "INDETERMINATE" || len(r.Violations) != 0 {
-		t.Fatalf("clean: exit %d status %s violations %d; want 2 INDETERMINATE 0", code, r.Status, len(r.Violations))
+	if code != 0 || r.Status != "PASS" || len(r.Violations) != 0 {
+		t.Fatalf("clean: exit %d status %s violations %d; want 0 PASS 0", code, r.Status, len(r.Violations))
 	}
-	want := map[string]string{"auth-private-import": "PASS", "db-in-repo": "INDETERMINATE", "routes-require-auth": "PASS"}
 	if len(r.Rules) != 3 {
 		t.Fatalf("clean rules = %+v, want all 3 configured rules", r.Rules)
 	}
 	for _, ru := range r.Rules {
-		if want[ru.ID] != ru.Status {
-			t.Fatalf("rule %s status %s, want %s", ru.ID, ru.Status, want[ru.ID])
+		if ru.Status != "PASS" {
+			t.Fatalf("rule %s status %s, want PASS", ru.ID, ru.Status)
 		}
 	}
-	notEval := 0
 	for _, d := range r.Diagnostics {
-		if d.Kind == "rule_not_evaluated" {
-			notEval++
-			if d.Relevance != "indeterminate" || len(d.AffectsRules) != 1 || d.AffectsRules[0].Reason != "not_evaluated" {
-				t.Fatalf("rule_not_evaluated diagnostic malformed: %+v", d)
-			}
+		if d.Relevance != "warning" || d.Kind == "rule_not_evaluated" {
+			t.Fatalf("clean demo has a relevant diagnostic: %+v", d)
 		}
 	}
-	if notEval != 1 {
-		t.Fatalf("rule_not_evaluated diagnostics = %d, want 1 (restrict_concept_to_boundary)", notEval)
+	if len(r.Assumptions) != 2 || r.Assumptions[0].ID != "no_possible_target" || r.Assumptions[1].ID != "trusted_stdlib" ||
+		r.Assumptions[0].ExemptedCount == 0 || r.Assumptions[1].ExemptedCount == 0 {
+		t.Fatalf("assumptions = %+v, want both with non-zero counts", r.Assumptions)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	if r.Inputs.ManifestSHA256 == nil {
+		t.Fatal("inputs.manifest_sha256 is null")
+	}
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 func TestDemoViolating(t *testing.T) {
@@ -152,8 +168,8 @@ func TestDemoViolating(t *testing.T) {
 	if code != 1 || r.Status != "VIOLATION" {
 		t.Fatalf("violating: exit %d status %s; want 1 VIOLATION", code, r.Status)
 	}
-	if len(r.Violations) != 2 {
-		t.Fatalf("violations = %+v, want exactly two", r.Violations)
+	if len(r.Violations) != 3 {
+		t.Fatalf("violations = %+v, want exactly three", r.Violations)
 	}
 	if len(r.Rules) != 3 {
 		t.Fatalf("rules = %+v, want all 3 configured rules listed", r.Rules)
@@ -163,15 +179,25 @@ func TestDemoViolating(t *testing.T) {
 		v.Location.File != "internal/billing/billing.go" || v.Location.Line != 9 || v.Location.Column != 2 {
 		t.Fatalf("violation = %+v, want auth-private-import at internal/billing/billing.go:9:2", v)
 	}
-	v = r.Violations[1]
+	v = r.Violations[2]
 	if v.RuleID != "routes-require-auth" || v.RuleKind != "require_middleware" ||
 		v.Location.File != "internal/server/server.go" || v.Location.Line != 18 {
 		t.Fatalf("violation = %+v, want routes-require-auth at internal/server/server.go:18 (GET /api/v1/admin/users)", v)
 	}
+	v = r.Violations[1]
+	if v.RuleID != "db-in-repo" || v.RuleKind != "restrict_concept_to_boundary" ||
+		v.Location.File != "internal/handler/handler.go" || v.Location.Line != 95 {
+		t.Fatalf("violation = %+v, want db-in-repo at internal/handler/handler.go:95 (h.DB.QueryContext in Export)", v)
+	}
 	if !strings.Contains(string(raw), "route:example.com/demo/internal/server:GET:/api/v1/admin/users#0") {
 		t.Fatalf("the violation must name the GET /api/v1/admin/users route:\n%s", raw)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	for _, d := range r.Diagnostics {
+		if d.Relevance != "warning" {
+			t.Fatalf("violating demo has a relevant diagnostic: %+v", d)
+		}
+	}
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 func TestBrokenFixture(t *testing.T) {
@@ -179,6 +205,10 @@ func TestBrokenFixture(t *testing.T) {
 	r := decode(t, raw)
 	if code != 2 || r.Status != "INDETERMINATE" || len(r.Violations) != 0 {
 		t.Fatalf("broken: exit %d status %s violations %d; want 2 INDETERMINATE 0", code, r.Status, len(r.Violations))
+	}
+	// A load failure leaves call facts incomplete: the manifest says so.
+	if m, err := os.ReadFile(filepath.Join(facts, "analysis.json")); err != nil || !strings.Contains(string(m), `"status": "load_error"`) {
+		t.Fatalf("broken manifest status is not load_error: %v\n%s", err, m)
 	}
 	found := false
 	for _, d := range r.Diagnostics {
@@ -195,7 +225,7 @@ func TestBrokenFixture(t *testing.T) {
 	if !found {
 		t.Fatalf("no package_load_error for example.com/broken/b at b/b.go:6:8 affecting no-a-root-import:\n%s", raw)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 func TestPolicyFailures(t *testing.T) {
@@ -237,6 +267,11 @@ func TestDeterministic(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Fatal("reports differ between runs")
 	}
+	ma, _ := os.ReadFile(filepath.Join(fa, "analysis.json"))
+	mb, _ := os.ReadFile(filepath.Join(fb, "analysis.json"))
+	if len(ma) == 0 || !bytes.Equal(ma, mb) {
+		t.Fatal("analysis manifests differ between runs (or are missing)")
+	}
 	sa, sb := shardsIn(t, fa), shardsIn(t, fb)
 	if len(sa) != len(sb) {
 		t.Fatalf("shard counts differ: %d vs %d", len(sa), len(sb))
@@ -250,9 +285,9 @@ func TestDeterministic(t *testing.T) {
 	}
 }
 
-// All-unsupported policy: the report is still written, every rule is
-// INDETERMINATE through rule_not_evaluated, exit 2.
-func TestAllRulesUnsupported(t *testing.T) {
+// A policy with only the restrict_concept_to_boundary rule: it is evaluated
+// (no rule_not_evaluated since step 4) and passes on the clean demo.
+func TestRestrictOnlyPolicy(t *testing.T) {
 	good, err := os.ReadFile(repoPolicy)
 	if err != nil {
 		t.Fatal(err)
@@ -265,12 +300,12 @@ func TestAllRulesUnsupported(t *testing.T) {
 	}
 	code, raw, _ := run(t, "--policy", p, "../../demo/clean")
 	r := decode(t, raw)
-	if code != 2 || r.Status != "INDETERMINATE" || len(r.Rules) != 1 {
-		t.Fatalf("exit %d status %s rules %+v; want 2 INDETERMINATE with the rule listed", code, r.Status, r.Rules)
+	if code != 0 || r.Status != "PASS" || len(r.Rules) != 1 || r.Rules[0].Status != "PASS" {
+		t.Fatalf("exit %d status %s rules %+v; want 0 PASS with db-in-repo PASS", code, r.Status, r.Rules)
 	}
-	for _, ru := range r.Rules {
-		if ru.Status != "INDETERMINATE" {
-			t.Fatalf("rule %s status %s, want INDETERMINATE", ru.ID, ru.Status)
+	for _, d := range r.Diagnostics {
+		if d.Kind == "rule_not_evaluated" {
+			t.Fatalf("restrict_concept_to_boundary is evaluated since step 4: %+v", d)
 		}
 	}
 	schemacheck(t, writeReport(t, t.TempDir(), raw))
@@ -327,7 +362,7 @@ func TestRegressUnsafeAndLineDirective(t *testing.T) {
 		}
 	}
 	assertDisjoint(t, raw)
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // B2 regression: a governed package with a load error and no compiled files
@@ -352,7 +387,7 @@ func TestRegressMissingGovernedPackage(t *testing.T) {
 	if err != nil || !strings.Contains(string(sh), `"source_status": "missing"`) || !strings.Contains(string(sh), `"origin": "module"`) {
 		t.Fatalf("absent shard missing or wrong: %v\n%s", err, sh)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // Codex repros through the CLI: malformed concept symbol ID and an empty rule array.
@@ -595,7 +630,7 @@ remediation.message = "Remove unsafe."
 		}
 	}
 	assertDisjoint(t, raw)
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // N2: app.go explicitly imports a package in a _-prefixed directory. Both are
@@ -627,7 +662,7 @@ func TestExplicitlyImportedUnderscorePackage(t *testing.T) {
 		t.Fatalf("_other/other.go must stay excluded: %v", files)
 	}
 	assertDisjoint(t, raw)
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // Step 3: one direct-wrapper attachment satisfies needs-auth and violates
@@ -660,7 +695,7 @@ func TestRouterRulesTwoRules(t *testing.T) {
 	if !unmatched {
 		t.Fatalf("unmatched except_routes must be a warning:\n%s", raw)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // Every shard emitted for the router fixtures (routes, middleware, closure
@@ -687,5 +722,5 @@ remediation.message = "m"
 	if code != 1 && code != 2 {
 		t.Fatalf("exit %d", code)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }

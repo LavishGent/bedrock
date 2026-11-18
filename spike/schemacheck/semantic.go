@@ -615,3 +615,103 @@ func semantic(doc any) []string {
 	}
 	return []string{fmt.Sprintf("unknown kind %v", d["kind"])}
 }
+
+// entryKinds are the symbol kinds that can be Entry members.
+var entryKinds = map[string]bool{"func": true, "method": true, "closure": true, "instance": true, "wrapper": true}
+
+// crossCheck applies the evaluator's merge checks to one run: every manifest
+// unit has exactly one shard whose canonical-JSON hash matches, symbol IDs
+// are unique across shards, external symbols resolve to their owner, the
+// Entry recovered from the shards matches manifest.entry, and each report
+// names this manifest and its shard count.
+func crossCheck(m obj, shards []obj, reports []obj) []string {
+	c := &checker{}
+	byUnit := map[string]obj{}
+	for _, sh := range shards {
+		id := str(sh["unit"].(obj)["id"])
+		if _, dup := byUnit[id]; dup {
+			c.errf("unit %s has more than one shard", id)
+		}
+		byUnit[id] = sh
+	}
+	units := arr(m["units"])
+	if len(units) != len(shards) {
+		c.errf("manifest lists %d units, %d shards given", len(units), len(shards))
+	}
+	for _, u := range units {
+		u := u.(obj)
+		sh, ok := byUnit[str(u["id"])]
+		if !ok {
+			c.errf("manifest unit %s has no shard", u["id"])
+			continue
+		}
+		if got := sha(canon(sh)); got != str(u["shard"]) {
+			c.errf("shard %s hash %s, manifest says %s", u["id"], got, u["shard"])
+		}
+		if str(sh["build_profile_digest"]) != str(m["build_profile_digest"]) {
+			c.errf("shard %s build_profile_digest differs from the manifest", u["id"])
+		}
+	}
+	owner := map[string]string{}
+	for _, sh := range shards {
+		uid := str(sh["unit"].(obj)["id"])
+		for _, s := range arr(sh["symbols"]) {
+			id := str(s.(obj)["id"])
+			if prev, dup := owner[id]; dup {
+				c.errf("symbol_id_collision: %s defined by %s and %s", id, prev, uid)
+			}
+			owner[id] = uid
+		}
+	}
+	incoming := map[string]bool{}
+	for _, sh := range shards {
+		uid := str(sh["unit"].(obj)["id"])
+		for _, e := range arr(sh["external_symbols"]) {
+			e := e.(obj)
+			if owner[str(e["id"])] != str(e["unit_id"]) {
+				c.errf("unresolved_external_symbol: %s in %s refers to %s in %s", e["id"], uid, e["id"], e["unit_id"])
+			}
+		}
+		for _, cs := range arr(sh["call_sites"]) {
+			for _, t := range arr(cs.(obj)["targets"]) {
+				incoming[str(t)] = true
+			}
+		}
+	}
+	if m["status"] == "complete" {
+		entry := map[string]bool{}
+		for _, sh := range shards {
+			for _, s := range arr(sh["symbols"]) {
+				s := s.(obj)
+				if s["in_universe"] == true && entryKinds[str(s["kind"])] && !incoming[str(s["id"])] {
+					entry[str(s["id"])] = true
+				}
+			}
+			for _, r := range arr(sh["routes"]) {
+				if h := r.(obj)["handler_sym"]; h != nil {
+					entry[str(h)] = true
+				}
+			}
+		}
+		var b []byte
+		for _, id := range keys(entry) {
+			b = append(b, id...)
+			b = append(b, '\n')
+		}
+		me := m["entry"].(obj)
+		if num(me["count"]) != len(entry) || str(me["digest"]) != sha(b) {
+			c.errf("entry_mismatch: recovered %d symbols %s, manifest %v %v", len(entry), sha(b), me["count"], me["digest"])
+		}
+	}
+	want := sha(canon(m))
+	for _, r := range reports {
+		in := r["inputs"].(obj)
+		if str(in["manifest_sha256"]) != want {
+			c.errf("report inputs.manifest_sha256 %v, manifest hashes to %s", in["manifest_sha256"], want)
+		}
+		if num(in["shard_count"]) != len(shards) {
+			c.errf("report inputs.shard_count %v, %d shards given", in["shard_count"], len(shards))
+		}
+	}
+	return c.errs
+}

@@ -445,3 +445,44 @@ func sortedKeys(m map[string]any) []string {
 	sort.Strings(out)
 	return out
 }
+
+// goStdlibSQL is pack go-stdlib-sql, concept database.query, for go1.26.11
+// (policy contract 5.1): exactly these 26 query, exec and prepare methods.
+var goStdlibSQL = func() []string {
+	var out []string
+	add := func(recv string, methods ...string) {
+		for _, m := range methods {
+			out = append(out, "(*database/sql."+recv+")."+m)
+		}
+	}
+	all := []string{"Exec", "ExecContext", "Query", "QueryContext", "QueryRow", "QueryRowContext"}
+	add("DB", append(all, "Prepare", "PrepareContext")...)
+	add("Tx", append(all, "Prepare", "PrepareContext")...)
+	add("Stmt", all...)
+	add("Conn", "ExecContext", "QueryContext", "QueryRowContext", "PrepareContext")
+	sort.Strings(out)
+	return out
+}()
+
+// Bindings returns the concept's bound symbol IDs: its packs' bindings for
+// the concept name plus its explicit symbols, sorted and unique.
+func (p *Policy) Bindings(name string) []string {
+	c := p.Concepts[name]
+	set := map[string]bool{}
+	for _, pk := range c.Packs {
+		if pk == packGoStdlibSQL && name == conceptDatabaseQuery {
+			for _, s := range goStdlibSQL {
+				set[s] = true
+			}
+		}
+	}
+	for _, s := range c.Symbols {
+		set[s] = true
+	}
+	out := make([]string, 0, len(set))
+	for s := range set {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}

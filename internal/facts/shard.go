@@ -9,7 +9,7 @@ type Shard struct {
 	Symbols            []Symbol          `json:"symbols"`
 	ExternalSymbols    []ExtSymbol       `json:"external_symbols"`
 	Imports            []Import          `json:"imports"`
-	CallSites          []any             `json:"call_sites"`
+	CallSites          []CallSite        `json:"call_sites"`
 	Routes             []Route           `json:"routes"`
 	RouteMiddleware    []RouteMiddleware `json:"route_middleware"`
 	Diagnostics        []Diagnostic      `json:"diagnostics"`
@@ -118,4 +118,18 @@ type RouteMiddleware struct {
 	Order         int       `json:"order"`
 	Source        string    `json:"source"`
 	Loc           *Location `json:"loc"`
+}
+
+// CallSite is one non-builtin call instruction of a universe function
+// (schema README, Call-site IDs). Targets are sorted and unique; an empty
+// target set on a non-static site carries an unresolved-call diagnostic.
+type CallSite struct {
+	ID         string    `json:"id"`
+	Caller     string    `json:"caller"`
+	Ordinal    int       `json:"ordinal"`
+	Mode       string    `json:"mode"`
+	CalleeHint *string   `json:"callee_hint"`
+	Targets    []string  `json:"targets"`
+	Resolution string    `json:"resolution"`
+	Loc        *Location `json:"loc"`
 }

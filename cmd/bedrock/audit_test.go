@@ -255,7 +255,7 @@ func runAuditCases(t *testing.T, cases []auditCase) {
 			if c.wantExit != 0 && r.Status == "PASS" {
 				t.Fatal("bypass reported PASS")
 			}
-			schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+			schemacheck(t, runDocs(t, facts, raw)...)
 		})
 	}
 }
@@ -773,7 +773,7 @@ func Start() *httptest.Server { return dep.RunHidden() }
 	if code != 2 || !strings.Contains(string(raw), "go:linkname") {
 		t.Fatalf("exit %d; want 2 with the go:linkname diagnostic:\n%s", code, raw)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // proofBodyMin is proofBody without references to the shared dependency.
@@ -839,7 +839,7 @@ func runCustomCases(t *testing.T, cases []customCase) {
 			if c.wantExit == 2 && !strings.Contains(string(raw), `"kind": "unsupported_router_form"`) {
 				t.Fatalf("no unsupported_router_form:\n%s", raw)
 			}
-			schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+			schemacheck(t, runDocs(t, facts, raw)...)
 		})
 	}
 }

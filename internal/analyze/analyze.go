@@ -125,6 +125,8 @@ type Result struct {
 	Routes           []*Route        // extracted routes, sorted by ID
 	RouteDiags       []RouteDiag     // route diagnostics with their reach
 	MiddlewareShaped map[string]bool // func/method ID -> has type func(http.Handler) http.Handler
+
+	Calls CallStats // call-fact extraction (plan step 4)
 }
 
 // ModulePath reads the module path from dir/go.mod.
@@ -258,6 +260,8 @@ func Load(ctx context.Context, dir string) *Result {
 		u.Shard.Imports = u.Imports
 	}
 	res.attachRoutes(all, l)
+	res.callFacts(all, l)
+	res.normalizeShards()
 	compiledFiles := map[string]bool{} // every file the loader compiled, any package
 	for _, p := range all {
 		for _, f := range p.CompiledGoFiles {
@@ -475,7 +479,7 @@ func newShard(u facts.Unit, syms []facts.Symbol, diags []facts.Diagnostic) *fact
 	return &facts.Shard{
 		SchemaVersion: facts.SchemaVersion, Kind: "unit_shard", BuildProfileDigest: ProfileDigest(),
 		Unit: u, Symbols: syms, ExternalSymbols: []facts.ExtSymbol{}, Imports: []facts.Import{},
-		CallSites: []any{}, Routes: []facts.Route{}, RouteMiddleware: []facts.RouteMiddleware{}, Diagnostics: diags,
+		CallSites: []facts.CallSite{}, Routes: []facts.Route{}, RouteMiddleware: []facts.RouteMiddleware{}, Diagnostics: diags,
 	}
 }
 

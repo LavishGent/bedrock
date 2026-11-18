@@ -131,3 +131,18 @@ func TestSymbolIDGrammar(t *testing.T) {
 		}
 	}
 }
+
+func TestGoStdlibSQLPack(t *testing.T) {
+	if len(goStdlibSQL) != 26 {
+		t.Fatalf("go-stdlib-sql binds %d symbols, want 26 (policy contract 5.1)", len(goStdlibSQL))
+	}
+	for _, s := range goStdlibSQL {
+		if !ValidSymbolID(s) {
+			t.Fatalf("pack symbol %q is not a valid symbol ID", s)
+		}
+	}
+	p := &Policy{Concepts: map[string]Concept{"database.query": {Packs: []string{"go-stdlib-sql"}, Symbols: []string{"example.com/x.Q"}}}}
+	if got := p.Bindings("database.query"); len(got) != 27 {
+		t.Fatalf("bindings = %d, want 27", len(got))
+	}
+}

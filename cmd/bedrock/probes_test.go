@@ -184,7 +184,7 @@ func init() {
 			if c.exit != 0 && r.Status == "PASS" {
 				t.Fatal("bypass reported PASS")
 			}
-			schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+			schemacheck(t, runDocs(t, facts, raw)...)
 		})
 	}
 }
@@ -239,7 +239,7 @@ func TestRouterInitFixture(t *testing.T) {
 			t.Fatalf("shard lacks symbol %s", id)
 		}
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // writeModule writes a probe module with the given extra files (paths
@@ -287,7 +287,7 @@ func requireUnknownIdentity(t *testing.T, dir string) {
 	if code != 2 || r.Status != "INDETERMINATE" || !strings.Contains(string(raw), `"kind": "unsupported_router_form"`) {
 		t.Fatalf("exit %d status %s; want 2 with unsupported_router_form:\n%s", code, r.Status, raw)
 	}
-	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+	schemacheck(t, runDocs(t, facts, raw)...)
 }
 
 // Codex recheck B1: a dependency's defined type Mux http.ServeMux with its own

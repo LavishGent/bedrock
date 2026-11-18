@@ -1,12 +1,13 @@
 // Package check runs one `bedrock check`: validate the policy, load the
 // module, evaluate the rules this build supports, and assemble the report
-// (report.schema.json, schema 0.3) and the unit shards.
+// (report.schema.json, schema 0.4), the unit shards and the analysis
+// manifest.
 //
-// Step 3 evaluates forbid_import and require_middleware. Every configured
-// rule is listed in rules[]; a rule of a kind this build cannot evaluate
-// (restrict_concept_to_boundary) gets a global rule_not_evaluated diagnostic
-// that makes it INDETERMINATE (schema 0.4), so the run exits 2 unless a real
-// violation gives 1. It never reports PASS for an unchecked rule.
+// Step 4 evaluates all three rule kinds: forbid_import, require_middleware
+// and restrict_concept_to_boundary (boundary.go). Every configured rule is
+// listed in rules[]; a rule of a kind a build cannot evaluate would get a
+// global rule_not_evaluated diagnostic that makes it INDETERMINATE (schema
+// 0.4). It never reports PASS for an unchecked rule.
 package check
 
 import (
@@ -28,18 +29,22 @@ type Options struct {
 	Dir         string // module root to analyze
 	PolicyPath  string // policy file to read
 	PolicyLabel string // policy path as recorded in the report
+
+	TimeoutSeconds int // analyzer limits recorded in the manifest (0: defaults)
+	MemoryMiB      int
 }
 
 // Output is the result of one check.
 type Output struct {
 	Report       *facts.Report
 	Shards       []*facts.Shard // sorted by unit ID
-	NotEvaluated []policy.Rule  // valid rules of kinds not evaluated in this build
+	Manifest     *facts.Manifest
+	NotEvaluated []policy.Rule // valid rules of kinds not evaluated in this build
 }
 
 // Evaluated reports whether this build evaluates rules of kind.
 func Evaluated(kind string) bool {
-	return kind == policy.ForbidImport || kind == policy.RequireMiddleware
+	return kind == policy.ForbidImport || kind == policy.RequireMiddleware || kind == policy.RestrictConceptToBoundary
 }
 
 // loadErrorKinds are the diagnostics of a unit that failed to load.
@@ -113,6 +118,15 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 		out.Shards = append(out.Shards, res.Units[id].Shard)
 	}
 	r.Inputs.ShardCount = len(out.Shards)
+	timeout, mem := o.TimeoutSeconds, o.MemoryMiB
+	if timeout <= 0 {
+		timeout = 120
+	}
+	if mem <= 0 {
+		mem = 4096
+	}
+	out.Manifest = res.Manifest(ToolVersion, timeout, mem)
+	r.Inputs.ManifestSHA256 = facts.Str(facts.SHA256(facts.Canon(out.Manifest)))
 	r.Packages.Included = append(r.Packages.Included, res.Module...)
 	r.Packages.Excluded = append(r.Packages.Excluded, res.Excluded...)
 	r.Packages.ExcludedFiles = append(r.Packages.ExcludedFiles, res.ExcludedFiles...)
@@ -134,12 +148,41 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 		}
 		diags = append(diags, rd)
 	}
+	// Merge the shards into one call graph (merge checks are global).
+	var g *graph
+	if res.Calls.Complete {
+		var mergeErrs []facts.Diagnostic
+		g, mergeErrs = mergeGraph(out.Shards, out.Manifest)
+		for _, d := range mergeErrs {
+			diags = append(diags, global(d))
+		}
+		if len(mergeErrs) > 0 {
+			g = nil
+		}
+	}
+	anyGlobal := false
+	for _, d := range diags {
+		anyGlobal = anyGlobal || d.Relevance == "global"
+	}
+	// Decision A assumptions apply only when a restrict_concept_to_boundary
+	// rule is actually evaluated (schema README, Assumptions).
+	evaluatesDB := false
+	for _, ru := range pol.Rules {
+		evaluatesDB = evaluatesDB || (ru.Kind == policy.RestrictConceptToBoundary && Evaluated(ru.Kind))
+	}
+	evaluatesDB = evaluatesDB && !anyGlobal && !res.Fatal
 	for _, id := range sortedIDs(res.Units) {
 		u := res.Units[id]
 		for _, d := range u.Shard.Diagnostics {
-			diags = append(diags, facts.ReportDiagnostic{Diagnostic: d, AffectsRules: []facts.AffectedRule{},
-				UnitOrigin: facts.Str(u.Origin)})
+			rd := facts.ReportDiagnostic{Diagnostic: d, AffectsRules: []facts.AffectedRule{}, UnitOrigin: facts.Str(u.Origin)}
+			if by := exemption(d, u.Origin); evaluatesDB && by != "" {
+				rd.ExemptedBy = facts.Str(by)
+			}
+			diags = append(diags, rd)
 		}
+	}
+	if evaluatesDB {
+		r.Assumptions = assumptions(diags)
 	}
 
 	for _, ru := range pol.Rules {
@@ -153,9 +196,16 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 			var vs []facts.Violation
 			var extra, warnings []facts.Diagnostic
 			var scope map[string]bool
-			if ru.Kind == policy.ForbidImport {
+			switch ru.Kind {
+			case policy.ForbidImport:
 				vs, extra, scope = forbidImport(pol, ru, res)
-			} else {
+			case policy.RestrictConceptToBoundary:
+				rc := restrictConcept(pol, ru, res, g, out.Shards)
+				vs, extra = rc.violations, rc.empties
+				for id, reason := range rc.affects {
+					affects[id] = append(affects[id], facts.AffectedRule{RuleID: ru.ID, Reason: reason})
+				}
+			default:
 				var routeAffects map[string]string
 				vs, extra, warnings, scope, routeAffects = requireMiddleware(pol, ru, res)
 				for id, reason := range routeAffects {
