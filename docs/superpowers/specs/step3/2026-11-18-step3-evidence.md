@@ -211,3 +211,100 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
 schemacheck: exit 0 over 388 documents, 0 failures
 ```
+
+## Origin allowlist (Codex review of 52c28ce/68da0ef: four blocker classes)
+
+**Root cause.** The audit allowlisted uses but treated "tracked" as "covered". The fix adds an **origin allowlist** under a closed-world rule (`../routers/README.md`, "Router value audit: origin and use allowlists", now normative):
+
+- **Covered origins.** A router is covered only if it comes from a recognized constructor in module code, a covered `With`/`Group`/`Route`, an audited factory whose every return is covered, or a closed (unexported, package-level, never-a-value) helper whose every call site is covered.
+- **Uncovered sources.** Every other router-bearing source is module-wide `unsupported_router_form` at its origin. Sources are now enumerated over operands too, so globals count.
+- **Use allowlist, tightened:**
+  - `ServeHTTP`, the read-only methods and the serving sinks need a proven concrete `*http.ServeMux` or `*chi.Mux`, checked before any router-operation allowance, with the exact handler position enforced;
+  - `http.Server.Handler` is allowed only on a local, field-write-only server that is used just to serve.
+- **Two fixes found while validating:**
+  - registrations in a function with `defer` were treated as conditional, because of the recover block;
+  - the fixed point treated not-yet-computed factories as uncovered instead of using a greatest fixed point.
+
+**Regressions** (`cmd/bedrock/audit_test.go`), each an isolated module:
+
+| Test | What it covers |
+| --- | --- |
+| `TestRouterOriginCodexModules` | All nine review modules, each with a real `httptest` request proving `/private` answers 200 unauthenticated, then asserting exit 2: `zero_global`, `server_field_escape`, `server_field_reload`, `server_field_helper`, `chi_interface_dispatch`, `chi_phi_dispatch`, `allocated_adapter_sink`, `dep_adapter_sink`, `dep_factory`. |
+| `TestRouterOriginAdversarial` | 40 self-review variants, ten per blocker class, all non-PASS (exit 2). **A, sources:** global pointer, global chi, local zero value, `new(chi.Mux)`, global alias, field load, map read, exported parameter, free variable, type assertion. **B, server:** returned, `Handler` read back, passed to a module helper, global, assigned then passed, method value, goroutine capture, copy, unproven (phi) handler, dependency handler. **C, dispatch and sinks:** `chi.Router` parameter `ServeHTTP`, phi of covered routers, adapter to `ListenAndServe`, `new` adapter to `httptest`, embedding wrapper to a sink, phi to a sink, read-only method on an unproven router, `ServeHTTP` method value, adapter through a closed helper, dependency router served. **D, dependency producers:** returned, served, adapter via `httptest`, through a module helper, extended with `With`, tuple, struct field, dependency global, generic factory, dependency method. |
+| `TestRouterOriginLocalServerNoFalsePositive` | Stays exit 0: a local `http.Server` literal with `defer srv.Close()`, a field-store server, and a closed factory plus serve helper. `TestRouterAuditNoFalsePositives` (local build, register, return, `ListenAndServe`, `httptest.NewServer`) also stays exit 0. |
+| earlier rounds | All earlier audit, probe and recheck tests still pass unchanged. |
+
+**Against the previous code** (`audit.go` and `routes.go` at `52c28ce`), all nine Codex modules and 28 of the 40 variants were silent bypasses (exit 0 PASS):
+
+```
+TestRouterOriginCodexModules/zero_global -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/server_field_escape -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/server_field_reload -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/server_field_helper -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/chi_interface_dispatch -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/chi_phi_dispatch -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/allocated_adapter_sink -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/dep_adapter_sink -> old code: exit 0 PASS (bypass)
+TestRouterOriginCodexModules/dep_factory -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/A1-global-pointer -> old code: already non-PASS
+TestRouterOriginAdversarial/A2-global-chi -> old code: already non-PASS
+TestRouterOriginAdversarial/A3-local-zero-value -> old code: already non-PASS
+TestRouterOriginAdversarial/A4-new-chi -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/A5-global-alias -> old code: already non-PASS
+TestRouterOriginAdversarial/A6-field-load -> old code: already non-PASS
+TestRouterOriginAdversarial/A7-map-read -> old code: already non-PASS
+TestRouterOriginAdversarial/A8-exported-parameter -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/A9-free-variable -> old code: already non-PASS
+TestRouterOriginAdversarial/A10-type-assertion -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B1-server-returned -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B2-handler-read-back -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B3-server-to-module-helper -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B4-server-global -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B5-handler-assigned-then-passed -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B6-server-method-value -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B7-server-in-goroutine -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B8-server-copied -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B9-unproven-handler -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/B10-dependency-handler -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C1-chi-router-param-servehttp -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C2-phi-of-covered-servehttp -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C3-adapter-to-listenandserve -> old code: already non-PASS
+TestRouterOriginAdversarial/C4-new-adapter-to-httptest -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C5-embedding-wrapper-to-sink -> old code: already non-PASS
+TestRouterOriginAdversarial/C6-phi-to-sink -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C7-read-only-on-unproven -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/C8-servehttp-method-value -> old code: already non-PASS
+TestRouterOriginAdversarial/C9-adapter-through-closed-helper -> old code: already non-PASS
+TestRouterOriginAdversarial/C10-dependency-router-to-serve -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D1-returned -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D2-served -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D3-adapter-to-httptest -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D4-through-module-helper -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D5-dependency-router-extended -> old code: already non-PASS
+TestRouterOriginAdversarial/D6-tuple -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D7-struct-field -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D8-dependency-global -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D9-generic-factory -> old code: exit 0 PASS (bypass)
+TestRouterOriginAdversarial/D10-dependency-method -> old code: exit 0 PASS (bypass)
+```
+
+**Results.** No false INDETERMINATE was introduced:
+
+- `demo/clean` is exit 2, with `require_middleware` PASS and only `rule_not_evaluated`;
+- `demo/violating` is exit 1, with exactly `billing.go:9` and `server.go:18`;
+- the other fixtures are unchanged.
+
+The `f := s.Serve` bound-method wrapper limitation is documented as conservative in `../routers/README.md`.
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant [('unsupported_router_form', 'example.com/routerinit')]
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
+schemacheck: exit 0 over 388 documents, 0 failures
+```
