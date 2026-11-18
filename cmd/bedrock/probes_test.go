@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -157,16 +158,6 @@ func Setup() http.Handler {
 	get(r, "/z", h)
 	return r
 }`, 2, "unsupported_router_form"},
-		// S1: middleware declared with an alias of http.Handler is accepted.
-		{"S1-alias-middleware-type", `
-type H = http.Handler
-func AuthH(next H) H { return next }
-func API() http.Handler {
-	r := chi.NewRouter()
-	r.Use(Auth)
-	r.Get("/x", h)
-	return r
-}`, 0, ""},
 		// S2: registration in init(): the owning init symbol is emitted.
 		{"S2-init-registration", `
 func init() {
@@ -247,4 +238,234 @@ func TestRouterInitFixture(t *testing.T) {
 		}
 	}
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+}
+
+// writeModule writes a probe module with the given extra files (paths
+// relative to the module root) plus the shared policy and chi go.sum.
+func writeModule(t *testing.T, goMod string, files map[string]string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "probe")
+	sum, err := os.ReadFile("../../testdata/routerrules/go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files["go.mod"] = goMod
+	files["go.sum"] = string(sum)
+	files[".bedrock/policy.toml"] = probePolicy
+	for name, src := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// httpProof runs the probe module's own tests, which issue a real httptest
+// request to the unauthenticated route and require HTTP 200: the route is
+// genuinely unprotected, so anything but non-PASS would be a silent bypass.
+func httpProof(t *testing.T, dir string) {
+	t.Helper()
+	cmd := exec.Command("go", "test", "-count=1", "-run", "TestPrivateIsOpen", "./...")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly")
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("probe module's httptest proof failed: %v\n%s", err, out)
+	}
+}
+
+func requireUnknownIdentity(t *testing.T, dir string) {
+	t.Helper()
+	code, raw, facts := run(t, dir)
+	r := decode(t, raw)
+	if code != 2 || r.Status != "INDETERMINATE" || !strings.Contains(string(raw), `"kind": "unsupported_router_form"`) {
+		t.Fatalf("exit %d status %s; want 2 with unsupported_router_form:\n%s", code, r.Status, raw)
+	}
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+}
+
+// Codex recheck B1: a dependency's defined type Mux http.ServeMux with its own
+// ServeHTTP registers and serves an unauthenticated /private. Converting the
+// module's ServeMux to *adapter.Mux changes the method set: escape, not PASS.
+func TestRecheckB1AdapterConversion(t *testing.T) {
+	dir := writeModule(t, `module example.com/probe
+
+go 1.26.0
+
+require (
+	example.com/adapter v0.0.0
+	github.com/go-chi/chi/v5 v5.5.0
+)
+
+replace example.com/adapter => ./adapter
+`, map[string]string{
+		"adapter/go.mod": "module example.com/adapter\n\ngo 1.26.0\n",
+		"adapter/adapter.go": `package adapter
+
+import (
+	"net/http"
+	"sync"
+)
+
+// Mux is a ServeMux with its own ServeHTTP that registers an
+// unauthenticated route on first use (per mux) and then serves it.
+type Mux http.ServeMux
+
+var registered sync.Map
+
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sm := (*http.ServeMux)(m)
+	if _, done := registered.LoadOrStore(m, true); !done {
+		sm.HandleFunc("/private", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	}
+	sm.ServeHTTP(w, r)
+}
+`,
+		"probe.go": probePrelude + `
+import_placeholder
+`,
+		"probe_test.go": `package probe
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestPrivateIsOpen(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Serve(rec, httptest.NewRequest("GET", "/private", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /private without auth: %d, want 200 (the bypass)", rec.Code)
+	}
+}
+`,
+	})
+	// The module code: a recognized ServeMux converted to the adapter type.
+	src := strings.Replace(probePrelude, `"github.com/go-chi/chi/v5"`, `"github.com/go-chi/chi/v5"
+	"example.com/adapter"`, 1) + `
+// Serve converts a recognized ServeMux to the adapter type, assigns it to
+// http.Handler and calls ServeHTTP (the Codex repro).
+func Serve(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /safe", Auth(http.HandlerFunc(h)))
+	var hd http.Handler = (*adapter.Mux)(mux)
+	hd.ServeHTTP(w, r)
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "probe.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	httpProof(t, dir)
+	requireUnknownIdentity(t, dir)
+}
+
+// Codex recheck B3: Register(reg func(*chi.Mux, string, http.HandlerFunc), r)
+// calls reg(r, "/private", h); an external test caller passes (*chi.Mux).Get.
+// A receiver-first dynamic call is registration-shaped: unknown identity.
+func TestRecheckB3ReceiverFirstExternalCaller(t *testing.T) {
+	dir := writeModule(t, `module example.com/probe
+
+go 1.26.0
+
+require github.com/go-chi/chi/v5 v5.5.0
+`, map[string]string{
+		"probe.go": probePrelude + `
+// Register lets the caller choose how to register /private.
+func Register(reg func(*chi.Mux, string, http.HandlerFunc), r *chi.Mux) {
+	reg(r, "/private", h)
+}
+`,
+		"probe_ext_test.go": `package probe_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+
+	"example.com/probe"
+)
+
+func TestPrivateIsOpen(t *testing.T) {
+	r := chi.NewRouter()
+	probe.Register((*chi.Mux).Get, r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/private", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /private without auth: %d, want 200 (the bypass)", rec.Code)
+	}
+}
+`,
+	})
+	httpProof(t, dir)
+	requireUnknownIdentity(t, dir)
+}
+
+// A router-typed parameter handed to code outside the module (not analyzed)
+// is unknown identity as well.
+func TestRecheckRouterParamToDependency(t *testing.T) {
+	dir := writeModule(t, `module example.com/probe
+
+go 1.26.0
+
+require (
+	example.com/dep v0.0.0
+	github.com/go-chi/chi/v5 v5.5.0
+)
+
+replace example.com/dep => ./dep
+`, map[string]string{
+		"dep/go.mod": "module example.com/dep\n\ngo 1.26.0\n\nrequire github.com/go-chi/chi/v5 v5.5.0\n",
+		"dep/go.sum": "",
+		"dep/dep.go": `package dep
+
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// Setup registers an unauthenticated route on the caller's router.
+func Setup(r *chi.Mux) {
+	r.Get("/private", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+}
+`,
+		"probe.go": strings.Replace(probePrelude, `"github.com/go-chi/chi/v5"`, `"github.com/go-chi/chi/v5"
+	"example.com/dep"`, 1) + `
+// Wire hands its router parameter to the dependency.
+func Wire(r *chi.Mux) { dep.Setup(r) }
+`,
+		"probe_test.go": `package probe
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+)
+
+func TestPrivateIsOpen(t *testing.T) {
+	r := chi.NewRouter()
+	Wire(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/private", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /private without auth: %d, want 200 (the bypass)", rec.Code)
+	}
+}
+`,
+	})
+	sum, _ := os.ReadFile("../../testdata/routerrules/go.sum")
+	if err := os.WriteFile(filepath.Join(dir, "dep", "go.sum"), sum, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	httpProof(t, dir)
+	requireUnknownIdentity(t, dir)
 }

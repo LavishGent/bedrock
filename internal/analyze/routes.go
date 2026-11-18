@@ -131,6 +131,7 @@ type extractor struct {
 	closures   map[string][]facts.Symbol // unit -> closure symbols
 	parents    map[string]*ssa.Function  // closure parent ID -> function (for package initializers)
 	fnByID     map[string]*ssa.Function  // every module function with a body, by symbol ID
+	module     map[string]bool           // module package paths (analyzed for routes)
 	wrappers   map[string]facts.Symbol   // $bound wrapper ID -> symbol (owner set later)
 }
 
@@ -138,7 +139,7 @@ type extractor struct {
 // routes, middleware chains and diagnostics.
 func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) *extractor {
 	x := &extractor{l: l, pkgOf: map[*types.Package]*packages.Package{}, nested: map[*ssa.Function]bool{},
-		closures: map[string][]facts.Symbol{}, wrappers: map[string]facts.Symbol{}, parents: map[string]*ssa.Function{}, fnByID: map[string]*ssa.Function{}}
+		closures: map[string][]facts.Symbol{}, wrappers: map[string]facts.Symbol{}, parents: map[string]*ssa.Function{}, fnByID: map[string]*ssa.Function{}, module: module}
 	if len(all) == 0 {
 		return x
 	}
@@ -491,6 +492,13 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 					"call with a registration-shaped signature (pattern, handler) through a function value or interface that cannot be resolved to a supported router", loc)
 				continue
 			}
+			if o := classify(c); o == nil && x.unanalyzedRouterCall(c) {
+				// Code outside the module is not analyzed for routes; a router
+				// handed to it may be registered on there.
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form",
+					"a router value is passed to "+c.StaticCallee().String()+", which is outside the analyzed module; registrations there cannot be identified", loc)
+				continue
+			}
 			cond := !uncond[b]
 			if _, isGo := ins.(*ssa.Go); isGo {
 				cond = true
@@ -739,20 +747,64 @@ func registrationShaped(c *ssa.CallCommon) bool {
 		return false
 	}
 	sig := c.Signature()
-	if sig == nil || sig.Params().Len() < 2 {
+	if sig == nil {
 		return false
 	}
-	b, ok := types.Unalias(sig.Params().At(0).Type()).Underlying().(*types.Basic)
+	// A dynamic call that receives a router value can register on it,
+	// whatever the rest of its signature (reg(r, "/p", h) with reg bound to
+	// (*chi.Mux).Get by an external caller).
+	for _, a := range c.Args {
+		if isRouterValueType(a.Type()) {
+			return true
+		}
+	}
+	params := sig.Params()
+	first := 0
+	if params.Len() >= 3 && isRouterValueType(params.At(0).Type()) {
+		first = 1 // receiver-first: func(router, pattern, handler)
+	}
+	if params.Len() < first+2 {
+		return false
+	}
+	b, ok := types.Unalias(params.At(first).Type()).Underlying().(*types.Basic)
 	if !ok || b.Kind() != types.String {
 		return false
 	}
-	h := sig.Params().At(1).Type()
+	h := params.At(first + 1).Type()
 	if isHTTPHandler(h) || isHandlerFunc(h) {
 		return true
 	}
 	fs, ok := types.Unalias(h).Underlying().(*types.Signature)
 	return ok && fs.Params().Len() == 2 && fs.Results().Len() == 0 && isResponseWriter(fs.Params().At(0).Type())
 }
+
+// unanalyzedRouterCall reports a static call into a package that is neither
+// module code (analyzed) nor chi/net/http (modeled) with a router-typed
+// argument.
+func (x *extractor) unanalyzedRouterCall(c *ssa.CallCommon) bool {
+	callee := c.StaticCallee()
+	if callee == nil {
+		return false
+	}
+	obj, _ := callee.Object().(*types.Func)
+	if obj == nil || obj.Pkg() == nil {
+		return false
+	}
+	path := obj.Pkg().Path()
+	if x.module[path] || path == chiPath || path == httpPath {
+		return false
+	}
+	for _, a := range c.Args {
+		if isRouterValueType(a.Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRouterValueType reports a recognized router type (*http.ServeMux, a chi
+// Mux or Router, aliases resolved).
+func isRouterValueType(t types.Type) bool { return isServeMux(t) || isChiRouterType(t) }
 
 func isResponseWriter(t types.Type) bool {
 	n, ok := types.Unalias(t).(*types.Named)
@@ -1040,6 +1092,16 @@ func (x *extractor) register(fn *ssa.Function, unit string, r *router, o *op, co
 // registration receiver, returned, the handler of ListenAndServe/Serve, or
 // the Handler field of an http.Server.
 func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
+	return escapesProven(v, seen, true)
+}
+
+// escapesProven walks the uses of a router value. proven means the value's
+// concrete (dynamic) type is still known to be the recognized router type
+// (*http.ServeMux or a chi router): only then is ServeHTTP through an
+// interface read-only. A conversion to another defined type (type Mux
+// http.ServeMux with its own methods) changes the method set and escapes;
+// after a phi merge the dynamic type is no longer proven.
+func escapesProven(v ssa.Value, seen map[ssa.Value]bool, proven bool) string {
 	if seen[v] || v.Referrers() == nil {
 		return ""
 	}
@@ -1048,21 +1110,24 @@ func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
 		switch t := ref.(type) {
 		case *ssa.DebugRef, *ssa.Return:
 		case *ssa.ChangeType:
-			if why := escapes(t, seen); why != "" {
+			if !isServeMux(t.Type()) && !isChiRouterType(t.Type()) {
+				return "converted to " + t.Type().String() + ", a different defined type with its own methods"
+			}
+			if why := escapesProven(t, seen, proven); why != "" {
 				return why
 			}
 		case *ssa.Phi:
-			// A merged router is transparent here: registrations through it
-			// are diagnosed at their receiver; other uses are checked below.
-			if why := escapes(t, seen); why != "" {
+			// A merged router: registrations through it are diagnosed at
+			// their receiver; its dynamic type is no longer proven.
+			if why := escapesProven(t, seen, false); why != "" {
 				return why
 			}
 		case *ssa.MakeInterface:
-			if why := escapes(t, seen); why != "" {
+			if why := escapesProven(t, seen, proven); why != "" {
 				return why
 			}
 		case *ssa.ChangeInterface:
-			if why := escapes(t, seen); why != "" {
+			if why := escapesProven(t, seen, proven); why != "" {
 				return why
 			}
 		case *ssa.Store:
@@ -1080,16 +1145,21 @@ func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
 				// read-only ServeHTTP is allowed through an interface; any
 				// other interface (interface{ Handle(...) }) hides a
 				// registration whose identity cannot be checked.
-				if c.Method.Name() == "ServeHTTP" {
+				if c.Method.Name() == "ServeHTTP" && proven {
 					continue
 				}
-				return "called through interface method " + c.Method.FullName()
+				return "called through interface method " + c.Method.FullName() + " on a value whose concrete type is not proven to be the router"
 			}
 			if callee := c.StaticCallee(); callee != nil {
 				if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == httpPath {
 					switch obj.Name() {
 					case "ListenAndServe", "ListenAndServeTLS", "Serve", "ServeTLS":
 						continue
+					case "ServeHTTP", "Handler":
+						// (*http.ServeMux).ServeHTTP / Handler called directly: read-only.
+						if sig := callee.Signature; sig.Recv() != nil && isServeMux(sig.Recv().Type()) && len(c.Args) > 0 && c.Args[0] == v {
+							continue
+						}
 					}
 				}
 				if len(c.Args) > 0 && c.Args[0] == v && callee.Signature.Recv() != nil && isChiRouterType(callee.Signature.Recv().Type()) {
