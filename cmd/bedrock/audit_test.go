@@ -775,3 +775,289 @@ func Start() *httptest.Server { return dep.RunHidden() }
 	}
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }
+
+// proofBodyMin is proofBody without references to the shared dependency.
+func proofBodyMin(body string) string {
+	return `package probe
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestPrivateIsOpen(t *testing.T) {
+` + body + `
+}
+
+func expectOpen(t *testing.T, code int) {
+	t.Helper()
+	if code != http.StatusOK {
+		t.Fatalf("GET /private without auth: %d, want 200 (the bypass)", code)
+	}
+}
+`
+}
+
+// customCase is an isolated module with its own dependency source, for cases
+// where the dependency reaches back into the module (linkname, imports).
+type customCase struct {
+	name     string
+	files    map[string]string // relative path -> content (probe.go, dep/dep.go, ...)
+	depMod   string            // dep/go.mod (default depGoMod)
+	proof    string            // TestPrivateIsOpen body ("" = none)
+	wantExit int
+}
+
+func runCustomCases(t *testing.T, cases []customCase) {
+	sum, err := os.ReadFile("../../testdata/routerrules/go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			files := map[string]string{"dep/go.sum": string(sum)}
+			for k, v := range c.files {
+				files[k] = v
+			}
+			files["dep/go.mod"] = depGoMod
+			if c.depMod != "" {
+				files["dep/go.mod"] = c.depMod
+			}
+			if c.proof != "" {
+				files["probe_test.go"] = proofBodyMin(c.proof)
+			}
+			dir := writeModule(t, auditGoMod, files)
+			if c.proof != "" {
+				httpProof(t, dir)
+			}
+			code, raw, facts := run(t, dir)
+			r := decode(t, raw)
+			if code != c.wantExit || (c.wantExit != 0 && r.Status == "PASS") {
+				t.Fatalf("exit %d status %s, want %d:\n%s", code, r.Status, c.wantExit, raw)
+			}
+			if c.wantExit == 2 && !strings.Contains(string(raw), `"kind": "unsupported_router_form"`) {
+				t.Fatalf("no unsupported_router_form:\n%s", raw)
+			}
+			schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+		})
+	}
+}
+
+const probeAuthHeader = `package probe
+
+import (
+	"net/http"
+
+	"example.com/dep"
+)
+
+var _ = dep.Marker
+
+func Auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+}
+func h(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
+`
+
+// depBase is a minimal dependency: it registers /private on a router it gets.
+const depBase = `package dep
+
+import (
+	"net/http"
+	_ "unsafe"
+)
+
+var Marker = 0
+
+func open(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
+
+// SetupHTTPAny registers /private on a ServeMux passed as any.
+func SetupHTTPAny(v any) { v.(*http.ServeMux).HandleFunc("/private", open) }
+
+// RunFactory calls a factory and registers /private on its router.
+func RunFactory(f func() http.Handler) http.Handler { m := f(); SetupHTTPAny(m); return m }
+`
+
+const depProbeMod = "module example.com/dep\n\ngo 1.26.0\n\nrequire github.com/go-chi/chi/v5 v5.5.0\n\nrequire example.com/probe v0.0.0\n"
+
+// TestFactoryBoundaryCodexModules: the eight modules of the review of
+// 024bbb3 (each was exit 0 / PASS with a real HTTP 200).
+func TestFactoryBoundaryCodexModules(t *testing.T) {
+	const newAPI = `
+func NewAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}`
+	runCustomCases(t, []customCase{
+		{name: "form_global_factory", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+var makeAPI = NewAPI
+func API() http.Handler { m := makeAPI(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "form_bound_factory", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + `
+type S struct{}
+func (S) NewAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+func API() http.Handler { s := S{}; makeAPI := s.NewAPI; m := makeAPI(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "form_interface_factory", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + `
+type S struct{}
+func (S) NewAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+type Factory interface{ NewAPI() http.Handler }
+func API() http.Handler { var f Factory = S{}; m := f.NewAPI(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "form_callback_factory", wantExit: 2, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+func API(f func() http.Handler) http.Handler { m := f(); dep.SetupHTTPAny(m); return m }`},
+			proof: `	rec := httptest.NewRecorder()
+	API(NewAPI).ServeHTTP(rec, httptest.NewRequest("GET", "/private", nil))
+	expectOpen(t, rec.Code)`},
+		{name: "form_dependency_callback", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+func API() http.Handler { return dep.RunFactory(NewAPI) }`}},
+		{name: "form_tuple_global", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + `
+func NewAPI() (http.Handler, error) {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m, nil
+}
+var makeAPI = NewAPI
+func API() http.Handler { m, _ := makeAPI(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "link_factory_dependency_only", wantExit: 2, proof: serveProof, files: map[string]string{
+			"dep/dep.go": depBase + `
+//go:linkname hiddenFactory example.com/probe.newAPI
+func hiddenFactory() http.Handler
+
+// RunHiddenFactory reaches the module's unexported factory by linkname.
+func RunHiddenFactory() http.Handler { r := hiddenFactory(); SetupHTTPAny(r); return r }
+`,
+			"probe.go": probeAuthHeader + `
+func newAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+func API() http.Handler { return dep.RunHiddenFactory() }`}},
+		{name: "dependency_import_factory", wantExit: 2, proof: serveProof, depMod: depProbeMod, files: map[string]string{
+			"api/api.go": "package api\n\nimport \"net/http\"\n\n// Make returns a new ServeMux.\nfunc Make() *http.ServeMux { return http.NewServeMux() }\n",
+			"dep/dep.go": strings.Replace(depBase, `_ "unsafe"`, `_ "unsafe"
+
+	"example.com/probe/api"`, 1) + `
+// BackReference calls the module's factory and registers /private.
+func BackReference() http.Handler { m := api.Make(); m.HandleFunc("/private", open); return m }
+`,
+			"probe.go": probeAuthHeader + `
+func API() http.Handler { return dep.BackReference() }`}},
+	})
+}
+
+// Self-review: five more variants per blocker class.
+func TestFactoryBoundaryAdversarial(t *testing.T) {
+	const newAPI = `
+func NewAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}`
+	runCustomCases(t, []customCase{
+		// B1: factories as values or through unresolved calls.
+		{name: "B1-struct-field-factory", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+type F struct{ make func() http.Handler }
+var reg = F{make: NewAPI}
+func API() http.Handler { m := reg.make(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "B1-map-factory", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+var fs = map[string]func() http.Handler{"a": NewAPI}
+func API() http.Handler { m := fs["a"](); dep.SetupHTTPAny(m); return m }`}},
+		{name: "B1-generic-call", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+func call[T any](f func() T) T { return f() }
+func API() http.Handler { m := call(NewAPI); dep.SetupHTTPAny(m); return m }`}},
+		{name: "B1-closure-wrapper", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + newAPI + `
+func API() http.Handler { g := func() http.Handler { return NewAPI() }; m := g(); dep.SetupHTTPAny(m); return m }`}},
+		{name: "B1-interface-pointer-method", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depBase,
+			"probe.go": probeAuthHeader + `
+type S struct{ n int }
+func (s *S) Build() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+type B interface{ Build() http.Handler }
+func pick() B { return &S{} }
+func API() http.Handler { m := pick().Build(); dep.SetupHTTPAny(m); return m }`}},
+		// B2: dependency-side callers.
+		{name: "B2-linkname-pull-exported", wantExit: 2, proof: serveProof, files: map[string]string{
+			"dep/dep.go": depBase + `
+//go:linkname pulled example.com/probe.NewAPI
+func pulled() http.Handler
+func Run() http.Handler { r := pulled(); SetupHTTPAny(r); return r }
+`,
+			"probe.go": probeAuthHeader + newAPI + `
+func API() http.Handler { return dep.Run() }`}},
+		{name: "B2-import-interface-factory", wantExit: 2, proof: serveProof, depMod: depProbeMod, files: map[string]string{
+			"api/api.go": "package api\n\nimport \"net/http\"\n\n// Make returns a router as http.Handler.\nfunc Make() http.Handler { return http.NewServeMux() }\n",
+			"dep/dep.go": strings.Replace(depBase, `_ "unsafe"`, `_ "unsafe"
+
+	"example.com/probe/api"`, 1) + `
+func Back() http.Handler { m := api.Make(); SetupHTTPAny(m); return m }
+`,
+			"probe.go": probeAuthHeader + `
+func API() http.Handler { return dep.Back() }`}},
+		{name: "B2-import-method-factory", wantExit: 2, proof: serveProof, depMod: depProbeMod, files: map[string]string{
+			"api/api.go": "package api\n\nimport \"net/http\"\n\n// T makes routers.\ntype T struct{}\n\n// Make returns a new ServeMux.\nfunc (T) Make() *http.ServeMux { return http.NewServeMux() }\n",
+			"dep/dep.go": strings.Replace(depBase, `_ "unsafe"`, `_ "unsafe"
+
+	"example.com/probe/api"`, 1) + `
+func Back() http.Handler { m := api.T{}.Make(); m.HandleFunc("/private", open); return m }
+`,
+			"probe.go": probeAuthHeader + `
+func API() http.Handler { return dep.Back() }`}},
+		{name: "B2-import-wrapped-unexported", wantExit: 2, proof: serveProof, depMod: depProbeMod, files: map[string]string{
+			"api/api.go": "package api\n\nimport \"net/http\"\n\nfunc make1() *http.ServeMux { return http.NewServeMux() }\n\n// Make wraps an unexported factory.\nfunc Make() *http.ServeMux { return make1() }\n",
+			"dep/dep.go": strings.Replace(depBase, `_ "unsafe"`, `_ "unsafe"
+
+	"example.com/probe/api"`, 1) + `
+func Back() http.Handler { m := api.Make(); m.HandleFunc("/private", open); return m }
+`,
+			"probe.go": probeAuthHeader + `
+func API() http.Handler { return dep.Back() }`}},
+		{name: "B2-linkname-pull-chi-factory", wantExit: 2, proof: serveProof, files: map[string]string{
+			"dep/dep.go": `package dep
+
+import (
+	"net/http"
+	_ "unsafe"
+
+	"github.com/go-chi/chi/v5"
+)
+
+var Marker = 0
+
+//go:linkname pulled example.com/probe.newRouter
+func pulled() *chi.Mux
+
+func Run() http.Handler {
+	r := pulled()
+	r.Get("/private", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	return r
+}
+`,
+			"probe.go": strings.Replace(probeAuthHeader, `"example.com/dep"`, `"github.com/go-chi/chi/v5"
+
+	"example.com/dep"`, 1) + `
+func newRouter() *chi.Mux { return chi.NewRouter() }
+func API() http.Handler { return dep.Run() }`}},
+	})
+}

@@ -29,6 +29,7 @@ package analyze
 import (
 	"go/token"
 	"go/types"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -389,11 +390,14 @@ func (x *extractor) formFactory(f *ssa.Function, i int, st *state) bool {
 }
 
 // linknameExposed finds module functions named by a //go:linkname directive.
+// It scans every loaded non-stdlib package, dependencies included: in module
+// packages the local name is exposed (a push), and in any package a target
+// naming a module function exposes that function (a pull from a dependency).
 func linknameExposed(all []*packages.Package, module map[string]bool) map[string]bool {
 	out := map[string]bool{}
-	for _, p := range all {
-		if !module[p.PkgPath] {
-			continue
+	packages.Visit(all, nil, func(p *packages.Package) {
+		if p.Module == nil && !module[p.PkgPath] {
+			return // standard library
 		}
 		for _, f := range p.Syntax {
 			for _, cg := range f.Comments {
@@ -402,18 +406,42 @@ func linknameExposed(all []*packages.Package, module map[string]bool) map[string
 					if !ok {
 						continue
 					}
-					if fields := strings.Fields(rest); len(fields) > 0 {
+					fields := strings.Fields(rest)
+					if len(fields) > 0 && module[p.PkgPath] {
 						out[p.PkgPath+"."+fields[0]] = true
+					}
+					if len(fields) > 1 {
+						out[fields[1]] = true // target, wherever the directive is
 					}
 				}
 			}
 		}
+	})
+	return out
+}
+
+// dependencyImporters maps each module package to the loaded dependency
+// (non-module, non-stdlib) packages that import it.
+func dependencyImporters(all []*packages.Package, module map[string]bool) map[string][]string {
+	out := map[string][]string{}
+	packages.Visit(all, nil, func(p *packages.Package) {
+		if p.Module == nil || module[p.PkgPath] {
+			return
+		}
+		for path := range p.Imports {
+			if module[path] {
+				out[path] = append(out[path], p.PkgPath)
+			}
+		}
+	})
+	for k := range out {
+		sort.Strings(out[k])
 	}
 	return out
 }
 
 // audit checks every module function against the supported form.
-func (x *extractor) audit(fns []*ssa.Function, linkname map[string]bool) {
+func (x *extractor) audit(fns []*ssa.Function, linkname map[string]bool, depImporters map[string][]string) {
 	st := &state{audited: map[*ssa.Function]bool{}, mayRet: map[*ssa.Function]map[int]bool{}, linkname: map[*ssa.Function]bool{}}
 	for _, fn := range fns {
 		st.audited[fn] = true
@@ -449,6 +477,27 @@ func (x *extractor) audit(fns []*ssa.Function, linkname map[string]bool) {
 			}
 		}
 	}
+	// Router-returning module functions and their signatures (receiver
+	// stripped), for the function-value and dynamic-call checks.
+	var factorySigs []*types.Signature
+	for _, fn := range fns {
+		if st.mayRet[fn] != nil {
+			sig := fn.Signature
+			factorySigs = append(factorySigs, types.NewSignatureType(nil, nil, nil, sig.Params(), sig.Results(), sig.Variadic()))
+		}
+	}
+	// A module factory method behind a generated wrapper ($bound, $thunk).
+	underlying := func(g *ssa.Function) *ssa.Function {
+		if st.audited[g] {
+			return g
+		}
+		if obj, ok := g.Object().(*types.Func); ok && x.prog != nil {
+			if f := x.prog.FuncValue(obj); f != nil && st.audited[f] {
+				return f
+			}
+		}
+		return nil
+	}
 	for _, fn := range fns {
 		c := x.track(fn, st)
 		unit := fn.Pkg.Pkg.Path()
@@ -457,6 +506,74 @@ func (x *extractor) audit(fns []*ssa.Function, linkname map[string]bool) {
 				pos = fn.Pos()
 			}
 			x.diag(CatIdentity, unit, fn, "unsupported_router_form", why, x.pos(fn, pos))
+		}
+		// B2: a dependency that imports this package can call its router
+		// factories; dependency code is not analyzed, so fail closed.
+		if st.mayRet[fn] != nil && fn.Pkg != nil {
+			if imps := depImporters[fn.Pkg.Pkg.Path()]; len(imps) > 0 {
+				report(fn.Pos(), "a router-returning function in a package imported by dependency code ("+strings.Join(imps, ", ")+"); its callers there cannot be seen")
+			}
+		}
+		for _, b := range fn.Blocks {
+			for _, ins := range b.Instrs {
+				// B1: a router factory referenced other than as a direct callee
+				// (function value, global, bound method, callback argument).
+				var callee ssa.Value
+				ci, isCall := ins.(ssa.CallInstruction)
+				if isCall && !ci.Common().IsInvoke() {
+					callee = ci.Common().Value
+				}
+				for _, op := range ins.Operands(nil) {
+					if op == nil || *op == nil || *op == callee {
+						continue
+					}
+					var g *ssa.Function
+					switch t := (*op).(type) {
+					case *ssa.Function:
+						g = t
+					case *ssa.MakeClosure:
+						g, _ = t.Fn.(*ssa.Function)
+					}
+					if g == nil {
+						continue
+					}
+					if f := underlying(g); f != nil && f != fn && st.mayRet[f] != nil {
+						report(ins.Pos(), "router-returning function "+f.String()+" used as a value (variable, bound method, callback or argument); only direct calls whose result is served directly are in the form")
+					}
+				}
+				if !isCall {
+					continue
+				}
+				cc := ci.Common()
+				// A direct call to a generated wrapper of a module factory.
+				if g := cc.StaticCallee(); g != nil && !cc.IsInvoke() && !st.audited[g] {
+					if f := underlying(g); f != nil && st.mayRet[f] != nil {
+						report(ins.Pos(), "router-returning function "+f.String()+" called through a generated wrapper")
+					}
+					continue
+				}
+				// Dynamic or interface calls that may invoke a module factory.
+				var sig *types.Signature
+				switch {
+				case cc.IsInvoke():
+					if o := classify(cc); o != nil {
+						continue // chi.Router operations
+					}
+					sig, _ = cc.Method.Type().(*types.Signature)
+				case cc.StaticCallee() == nil:
+					sig = cc.Signature()
+				}
+				if sig == nil {
+					continue
+				}
+				plain := types.NewSignatureType(nil, nil, nil, sig.Params(), sig.Results(), sig.Variadic())
+				for _, fs := range factorySigs {
+					if types.Identical(plain, fs) {
+						report(ins.Pos(), "dynamic or interface call with the signature of a module router factory; its result may be a module-created router outside the supported form")
+						break
+					}
+				}
+			}
 		}
 		if st.linkname[fn] && (len(c.tracked) > 0 || st.mayRet[fn] != nil) {
 			report(fn.Pos(), "a function handling routers is exposed through //go:linkname; callers outside the analyzed module cannot be seen")

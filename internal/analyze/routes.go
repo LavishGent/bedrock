@@ -218,7 +218,7 @@ func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) 
 		}
 	}
 	x.routerUnderlying = routerUnderlyingTypes(all)
-	x.audit(fns, linknameExposed(all, module))
+	x.audit(fns, linknameExposed(all, module), dependencyImporters(all, module))
 	return x
 }
 
