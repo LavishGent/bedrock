@@ -19,12 +19,21 @@
 #
 # Usage: docs/integration/agent-demo/prepare.sh [OUT_DIR]   (default: a new temp dir)
 # Env:   BEDROCK  path to a bedrock binary (default: built from this checkout)
-# Needs: go1.26.11 (to build bedrock), git, perl, jq.
+# Needs: bash, go1.26.11 (to build bedrock), git, perl, jq.
+# Generated commands (re-check, export, prompt.txt) quote every path as a
+# single-quoted shell literal, valid in sh, bash and zsh.
 set -euo pipefail
 
 die() {
 	echo "prepare.sh: $*" >&2
 	exit 2
+}
+# shq quotes $1 as a single POSIX shell literal ('...' with each ' written
+# as '\''), so generated commands keep paths containing spaces, quotes, $,
+# backticks or newlines literal when pasted into sh, bash or zsh.
+shq() {
+	local q="'\\''"
+	printf "'%s'" "${1//\'/$q}"
 }
 abs() { # absolute path of $1, relative to the invocation directory
 	case "$1" in
@@ -67,15 +76,16 @@ if grep -rn 'VIOLATION' --include='*.go' "$work" >/dev/null; then
 	die "VIOLATION markers remain in $work"
 fi
 
-(
-	cd "$work"
-	git init -q
-	git add -A
-	git -c user.name=bedrock-demo -c user.email=demo@example.invalid commit -q -m "demo baseline (violating, markers stripped)"
-) || die "creating the git baseline failed"
+# Each step runs only if the previous one succeeded (an explicit chain:
+# errexit does not apply on the left of ||).
+(cd "$work" &&
+	git init -q &&
+	git add -A &&
+	git -c user.name=bedrock-demo -c user.email=demo@example.invalid commit -q -m "demo baseline (violating, markers stripped)") ||
+	die "creating the git baseline failed"
 
 report="$out/report.json"
-check="\"$bin\" check --policy .bedrock/policy.toml --out \"$report\" ."
+check="$(shq "$bin") check --policy .bedrock/policy.toml --out $(shq "$report") ."
 set +e
 (cd "$work" && "$bin" check --policy .bedrock/policy.toml --out "$report" .)
 code=$?
@@ -101,7 +111,7 @@ fi
 	cat <<PROMPT
 This Go service is checked by bedrock, an architecture-rule checker. Below is its JSON report.
 Fix every violation and every INDETERMINATE diagnostic so that this command, run in this
-directory ($work), exits 0:
+directory, $(shq "$work"), exits 0:
 
     $check
 
@@ -121,7 +131,7 @@ $got
 demo copy:  $work
 report:     $report
 prompt:     $out/prompt.txt   (paste this into the agent, opened in the demo copy)
-checker:    export BEDROCK="$bin"
-re-check:   cd "$work" && $check
+checker:    export BEDROCK=$(shq "$bin")
+re-check:   cd $(shq "$work") && $check
 Next: follow docs/integration/agent-demo/README.md.
 DONE

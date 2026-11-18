@@ -9,8 +9,8 @@
 # latest report path and exits 1: never an empty, success-shaped result.
 #
 # jq is a hard prerequisite. Without it the hook cannot read the report or
-# serialize its answer safely, so it emits a hand-written follow-up saying the
-# check could not be parsed, with the report path, and exits 2.
+# serialize its answer safely, so it emits a constant follow-up saying the
+# check could not be parsed (exit code and report path on stderr) and exits 2.
 #
 # Exit 2 (INDETERMINATE) from bedrock is uncertainty, not a pass, and is fed
 # back exactly like exit 1. This is a repair aid; the authoritative gates are
@@ -30,10 +30,11 @@ findings=$(BEDROCK_REPORT="$report" "${BEDROCK_CHECK:-$here/../hooks/bedrock-che
 code=$?
 
 if ! command -v jq >/dev/null 2>&1; then
-	# Escape the path for a JSON string by hand (backslash and double quote).
-	esc=$(printf '%s' "$report" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
-	printf '{"followup_message":"bedrock hook FAILED: jq is not installed, so the bedrock result (exit %s) could not be parsed. Treat this as a failing check. Report: %s"}\n' "$code" "$esc"
-	echo "bedrock-stop.sh: jq is required; bedrock exit $code, report $report" >&2
+	# Constant JSON: no path or other variable text is embedded, so the
+	# answer is valid JSON whatever the path contains. The exact exit code
+	# and report path go to stderr only.
+	echo '{"followup_message":"bedrock hook FAILED: jq is not installed, so the bedrock result could not be parsed. Treat this as a failing check. The exit code and report path are in the hook stderr."}'
+	printf 'bedrock-stop.sh: jq is required; bedrock exit %s, report %s\n' "$code" "$report" >&2
 	exit 2
 fi
 
