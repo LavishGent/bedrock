@@ -72,7 +72,10 @@ func PhiReceiver(prod bool) http.Handler {
 	return r
 }
 
-func register(r chi.Router) {
+// register is also used as a function value (NamedGroup), so it can be
+// called from outside the audited call graph: its router parameter has an
+// unknown origin.
+func register(r chi.Router) { // want unsupported_router_form
 	r.Get("/helper", ok) // want unsupported_router_form
 }
 

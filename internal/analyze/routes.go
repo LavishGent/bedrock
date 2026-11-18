@@ -411,8 +411,26 @@ func literal(parent *ssa.Function, v ssa.Value) *ssa.Function {
 // unconditional reports the blocks executed exactly once on every normal
 // path: not in a cycle, and dominating every return block.
 func unconditional(fn *ssa.Function) map[*ssa.BasicBlock]bool {
+	// Only returns reachable from the entry count: the recover block of a
+	// function with defer is entered only on panic.
+	reach := map[*ssa.BasicBlock]bool{}
+	if len(fn.Blocks) > 0 {
+		stack := []*ssa.BasicBlock{fn.Blocks[0]}
+		for len(stack) > 0 {
+			b := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if reach[b] {
+				continue
+			}
+			reach[b] = true
+			stack = append(stack, b.Succs...)
+		}
+	}
 	var rets []*ssa.BasicBlock
 	for _, b := range fn.Blocks {
+		if !reach[b] {
+			continue
+		}
 		if len(b.Instrs) > 0 {
 			if _, ok := b.Instrs[len(b.Instrs)-1].(*ssa.Return); ok {
 				rets = append(rets, b)
@@ -421,7 +439,7 @@ func unconditional(fn *ssa.Function) map[*ssa.BasicBlock]bool {
 	}
 	if len(rets) == 0 {
 		for _, b := range fn.Blocks {
-			if len(b.Succs) == 0 {
+			if reach[b] && len(b.Succs) == 0 {
 				rets = append(rets, b)
 			}
 		}
