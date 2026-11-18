@@ -3,7 +3,7 @@
 **Date:** 2026-11-18
 **Plan:** `../2026-11-17-bedrock-poc-plan.md`, sections 4, 7, 8 (step 4) and 10
 **Branch:** `LavishGent/poc-step4`, cut from `1b4dc73` (step 3 known limits) on `LavishGent/poc-step3`
-**Code commit:** `9a70d44`
+**Code commits:** `9a70d44`, review fixes listed below
 
 ## What was built
 
@@ -13,7 +13,7 @@
   - Unknown calls become diagnostics:
     - `unresolved_interface_call` / `unresolved_dynamic_call` for a non-static site with **zero** targets only;
     - `bodyless_function` for a site with a bodyless target;
-    - `reflection_call` for calls to `reflect.Value.Call/CallSlice/Method/MethodByName` or `reflect.MakeFunc`;
+    - `reflection_call` at a site any of whose resolved targets is `reflect.Value.Call/CallSlice/Method/MethodByName` or `reflect.MakeFunc`, directly or through synthetic wrappers, and wherever such an entry point is used as a value (review fix B2 below);
     - `unsafe_pointer`, one per function that converts to or from `unsafe.Pointer`.
 - **Symbol IDs.** Before step 4 these were go/ssa's strings. Real runs showed two problems, both now fixed:
   - **Collisions:** 98 on the demo without instantiation and 70 with it.
@@ -38,7 +38,7 @@
     - otherwise it fails if a multi-source BFS from Entry with `In(B)` removed reaches it;
     - it also fails if no Entry reaches it at all (for example a cycle no Entry enters);
     - otherwise it passes.
-  - **Concept set.** The `go-stdlib-sql` pack binds the 26 symbols of policy contract 5.1, restricted to universe functions and closed over wrappers and instances (contract 5). Calls made inside such a wrapper are not reported again.
+  - **Concept set.** The `go-stdlib-sql` pack binds the 26 symbols of policy contract 5.1, restricted to universe functions and closed over wrappers and instances (contract 5). Only a synthetic wrapper's forwarding call to its bound origin is not reported again (review fix B1 below).
   - **Evidence.** A violation's evidence runs `entry` → `call`… → `call` (the bound callee) → `concept_binding`.
 - **Decision A relevance** (plan section 7, policy contract 7), unchanged in substance:
   - `trusted_stdlib` exempts every unknown call owned by a standard-library unit (loader provenance plus the pinned inventory).
@@ -139,7 +139,7 @@ That is 1.3% of the time limit and 24% of the memory limit. In-process, `analyze
 
 ## Verification
 
-- **Root.** `go build ./...`, `go vet ./...` and `go test -count=1 -timeout 30m ./...` all pass. `cmd/bedrock` took 462 s. The only skips are the three `TestKnownLimits` subtests for the documented known limits (L1 ×2, L2).
+- **Root.** `go build ./...`, `go vet ./...` and `go test -count=1 -timeout 30m ./...` all pass. `cmd/bedrock` took 462 s (513 s after the review fixes, with 30 fixtures). The only skips are the three `TestKnownLimits` subtests for the documented known limits (L1 ×2, L2).
 - **Demos and routerfixtures.** `demo/clean`, `demo/violating` and `testdata/routerfixtures` pass `go build ./...`, `go vet ./...` and `go test ./...`. Every `testdata/step4` module builds under the pinned profile and is gofmt-clean.
 - **Diff hygiene.** `git diff --check` is clean.
 
@@ -149,6 +149,63 @@ That is 1.3% of the time limit and 24% of the memory limit. In-process, `analyze
 - **Facts size.** A demo run writes ~41 MB of shards (`runtime` alone is 9.7 MB), and the report lists ~4,441 warning diagnostics (2.8 MB), almost all exempted standard-library unknown calls. This is as the contract requires: every exempted diagnostic stays listed.
 - **All or nothing.** Call facts are built only when every package loads and type-checks. Otherwise the manifest says `load_error`, and each `restrict_concept_to_boundary` rule is `INDETERMINATE` through the load-failure diagnostics. Those carry reason `unit_in_scope`, or `reachable_from_governed_entry` for out-of-scope failures, conservatively, since no graph exists to test reachability.
 - **Merge check 1.** The shard hash against the manifest is computed and enforced by the schemacheck run check. The in-process evaluator does not re-hash the shards it was just handed by the same process.
-- **Narrow `unsafe` and reflection detection.** `unsafe` is detected through `unsafe.Pointer` conversions. Reflection is detected through the five entry points above. Standard-library reflection (for example `text/template` calling methods) is trusted. A module function reached only that way has no incoming edge, so it is an Entry itself (policy contract 7.4).
+- **Narrow `unsafe` and reflection detection.** `unsafe` is detected through `unsafe.Pointer` conversions. Reflection is detected through the five entry points above, at any call site that resolves to one (through wrappers) and at any value use of one. Standard-library reflection (for example `text/template` calling methods) is trusted. A module function reached only that way has no incoming edge, so it is an Entry itself (policy contract 7.4).
 - **Package initializers.** Call sites in a synthesized package initializer `pkg.init` have `loc: null` (schema README, Locations). A bound call in a package-level variable initializer would therefore be reported without a location.
 - **`require_middleware`** is unchanged and still advisory against adversarial code (known limits L1/L2, `../routers/README.md`).
+
+## Review fixes (Codex review of 9a70d44/5ed5fd0: two silent-PASS blockers)
+
+**B1, ordinary bound callers.** The evaluator seeded its wrapper closure with every concept-bound symbol and then skipped every call whose caller was in it. Binding an ordinary function such as `handler.Raw`, which contains `db.Exec`, therefore turned a violation into PASS.
+
+- **Fix** (`internal/check/boundary.go`, `forwardsToBound`). A site is skipped only when its caller is a synthetic wrapper (`kind: wrapper`) in the closure, and the site forwards to that wrapper's `origin_id`.
+- **Still checked.** Calls in ordinary bound functions, methods, their closures and real generic instances are checked like any other.
+- **Contract.** Policy contract 5, "Wrapper closure", now says this explicitly.
+
+**B2, indirect reflection.** Reflection was recognized only by the exact static callee. Three forms produced no module-owned diagnostic, while the only `reflection_call` sat in a `reflect`-owned wrapper and was exempted by `trusted_stdlib`:
+
+- a bound method value (`call := v.Call; call(...)`);
+- a method expression in a func value;
+- an interface call of `Call`.
+
+**B2 fix** (`internal/analyze/callgraph.go`, `reflectEntry` and `reflectValueUses`):
+
+- A site is classified from **all** its resolved targets. Each target is followed through synthetic wrappers (`$bound`, `$thunk`, pointer, promotion and instantiation wrappers) to `(reflect.Value).Call`, `CallSlice`, `Method`, `MethodByName` or `reflect.MakeFunc`. The diagnostic is owned by the original caller's unit.
+- A function that uses such an entry point as a value also gets a `reflection_call` (`site_id: null`) at the use, so a reflective callback handed elsewhere is not lost.
+- Decision A is unchanged: genuinely standard-library-owned sites remain `trusted_stdlib`.
+- `schema/README.md` (Unknown-call diagnostics) states the new rule.
+
+**Regressions** are 16 new `testdata/step4` modules in `TestStep4Fixtures`. For B1 the expected violations are the `// FAIL` lines; for B2 every module exits 2 with module-owned `reflection_call` diagnostics (`unit_in_scope`). The second column is the result at `5ed5fd0`, before the fix:
+
+```
+case            before  after  what it exercises
+b1ordinary      0       1      review ordinary_bound_caller: handler.Raw bound as an extra concept symbol
+b1control       1       1      review ordinary_caller_control: same without the binding
+b1method        0       1      bound ordinary method
+b1closure       1       1      bound function whose SQL runs in a closure
+b1generic       1       1      bound generic function: the instance body and the call into it are both checked
+b1boundvalue    1       1      bound method called through a method value ($bound wrapper)
+b1interface     1       1      bound method reached through interface dispatch
+b2direct        2       2      review reflection_sql_direct (control)
+b2bound         0       2      review reflection_sql_bound: call := v.Call; call(...)
+b2expression    0       2      review reflection_sql_expression: var call = (reflect.Value).Call
+b2interface     0       2      review reflection_sql_interface: interface{ Call(...) }
+b2callslice     0       2      bound CallSlice
+b2argument      0       2      v.Call passed as an argument and invoked by a module helper
+b2field         0       2      v.Call stored in a struct field and invoked from it
+b2generic       2       2      Call invoked through a type parameter in a generic module function
+b2pointerexpr   0       2      pointer method expression (*reflect.Value).Call (a wrapper of Call)
+```
+
+The "1 before" B1 variants only showed the call into the bound function. Their own bodies' SQL was suppressed; it is now also reported.
+
+The review's runnable modules give these results with the fixed analyzer:
+
+- `ordinary_bound_caller` 1 and `ordinary_caller_control` 1;
+- `reflection_sql_{bound,expression,interface,direct}` all 2;
+- `reflect_{bound,direct,interface,method_expression}` all 2;
+- `sql_{bound,promotion,thunk}` and `generic_{direct,method}` all 1.
+
+**After the fixes:**
+- demo/clean still exits 0, and demo/violating exits 1 with exactly `billing.go:9`, `server.go:18` and `handler.go:95`. Assumption counts are unchanged (`no_possible_target` 3, `trusted_stdlib` 4,438).
+- The schemacheck run check passes for both demos.
+- Five repeat runs of demo/violating and of `b2bound` are byte-identical (reports, manifests, all shards).

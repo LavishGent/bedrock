@@ -217,7 +217,8 @@ The universe is a superset of the set listed in plan decision 4. It contains eve
 
 - `unresolved_interface_call` or `unresolved_dynamic_call` only for a non-static site with **zero** targets (a site with targets is resolved; multiple targets are over-approximation);
 - `bodyless_function` for a site with a bodyless target;
-- `reflection_call` for a static call to `(reflect.Value).Call`, `CallSlice`, `Method`, `MethodByName` or `reflect.MakeFunc`;
+- `reflection_call` at a call site any of whose resolved targets is a reflection entry point (`(reflect.Value).Call`, `CallSlice`, `Method`, `MethodByName`, `reflect.MakeFunc`), directly or through synthetic wrappers (`$bound`, `$thunk`, pointer, promotion and instantiation wrappers). This covers a static call, a bound method value, a method expression and an interface call alike. The diagnostic is owned by the caller's unit, so a module or dependency site stays relevant under decision A;
+- `reflection_call` with `site_id: null` where a function uses such an entry point (or a wrapper of one) as a value instead of calling it, for example passing `reflect.ValueOf(f).Call` as an argument;
 - `unsafe_pointer` once per function that converts to or from `unsafe.Pointer`, with `site_id: null`.
 
 All are `warning` severity, owned by the caller's unit. Call facts are built only when every package loads and type-checks; otherwise the manifest `status` is `load_error` and `call_sites` are empty.
