@@ -174,6 +174,17 @@ middleware = "auth.middleware"
 
 **Callers.** A function that creates and returns a router in the form is a "form factory" when every one of its returns, at that result, is a constructor result of its own (directly or through an interface conversion), and it is not exposed by `go:linkname`. A caller of a form factory may **only serve the result directly**: pass it to a serving API, or store it as a local `http.Server` `Handler`. The caller must not register on it, return it, or pass it on. The demo's `main` serves `server.NewAPI(h)` and `server.NewAdmin(h)` this way.
 
+**Factory boundaries** (bounded fix after the review of `024bbb3`). A router-returning module function is one that may return a router at some result. It may only be **called directly** by a module function that serves the result directly. These are module-wide `unsupported_router_form`:
+
+- **referencing it any other way:** a function value, a global or field holding it, a map entry, a bound method value or method expression (mapped back through its generated wrapper), or passing it as an argument or callback, including to dependency code (`dep.RunFactory(NewAPI)`) and to generic functions;
+- **calling it through a generated wrapper;**
+- **any dynamic or interface call whose signature is identical to that of a router-returning module function** (receiver stripped) and whose result can therefore carry a module-created router. Examples: a factory callback `f()` of type `func() http.Handler`, an interface method `Factory.NewAPI()`, and a tuple-returning factory reached through a function variable. Recognized `chi.Router` operations are excluded;
+- **dependency-side callers:**
+  - every `//go:linkname` directive in every loaded non-stdlib package, dependencies included, is scanned. A directive whose target names a module function makes that function exposed, as does a module-side directive naming a local function. An exposed function that handles routers is rejected;
+  - any module package that contains a router-returning function and is imported by a loaded dependency package is rejected at those functions, because dependency code is not analyzed and its callers cannot be seen.
+
+Precision is not attempted at these boundaries; they fail closed.
+
 **Everything else is module-wide `unsupported_router_form` at that point.** That includes:
 
 - parameters;

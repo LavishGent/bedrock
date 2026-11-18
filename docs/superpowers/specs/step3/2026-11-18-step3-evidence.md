@@ -353,3 +353,59 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
 schemacheck: exit 0 over 388 documents, 0 failures
 ```
+
+## Factory boundaries (Codex review of 024bbb3/33be3ba: bounded fix)
+
+This is the coordinator's bounded fix inside the narrowed form. The normative text is "Factory boundaries" in `../routers/README.md`.
+
+- **B1, factories as values or through unresolved calls.** A router-returning module function referenced other than as a direct callee is module-wide `unsupported_router_form`. That covers a function value, a global, a field, a map, a bound method or method expression mapped back through its wrapper, and an argument or callback. So is a call through a generated wrapper, and any dynamic or interface call whose signature is identical to a router-returning module function's.
+- **B2, dependency-side callers.**
+  - `//go:linkname` directives are scanned in all loaded non-stdlib packages, and a target naming a module function exposes it.
+  - A module package that contains a router-returning function and is imported by a loaded dependency is rejected at those functions.
+
+**Regressions** (`cmd/bedrock/audit_test.go`), each an isolated module with a real `httptest` request proving `/private` answers 200 unauthenticated, asserting exit 2:
+
+- `TestFactoryBoundaryCodexModules`: the eight review modules `form_global_factory`, `form_bound_factory`, `form_interface_factory`, `form_callback_factory`, `form_dependency_callback`, `form_tuple_global`, `link_factory_dependency_only` and `dependency_import_factory`.
+- `TestFactoryBoundaryAdversarial`, five per blocker:
+  - **B1:** factory in a struct field, factory in a map, generic call, closure wrapper, and interface method on a pointer receiver;
+  - **B2:** linkname pull of an exported factory, a dependency importing an interface-returning factory, a method factory, a wrapped unexported factory, and a linkname pull of a chi factory.
+
+Against the previous code (`024bbb3`), all eight Codex modules and 8 of the 10 variants were silent bypasses (exit 0, PASS):
+
+```
+TestFactoryBoundaryCodexModules/form_global_factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/form_bound_factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/form_interface_factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/form_callback_factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/form_dependency_callback -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/form_tuple_global -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/link_factory_dependency_only -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryCodexModules/dependency_import_factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B1-struct-field-factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B1-map-factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B1-generic-call -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B1-closure-wrapper -> old code: already non-PASS
+TestFactoryBoundaryAdversarial/B1-interface-pointer-method -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B2-linkname-pull-exported -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B2-import-interface-factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B2-import-method-factory -> old code: exit 0 PASS (bypass)
+TestFactoryBoundaryAdversarial/B2-import-wrapped-unexported -> old code: already non-PASS
+TestFactoryBoundaryAdversarial/B2-linkname-pull-chi-factory -> old code: exit 0 PASS (bypass)
+```
+
+All earlier regressions still pass. The positive cases stay exit 0: a single-function build/register/return/`ListenAndServe`, a direct form factory served directly, and a local `http.Server`.
+
+**Results.** `demo/clean` (exit 2; `require_middleware` PASS; only `rule_not_evaluated`) and `demo/violating` (exit 1; exactly `billing.go:9` and `server.go:18`) are unchanged, as are all fixtures:
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant [('unsupported_router_form', 'example.com/routerinit'), ('unsupported_router_form', 'example.com/routerinit'), ('unsupported_router_form', 'example.com/routerinit')]
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
+schemacheck: exit 0 over 388 documents, 0 failures
+```
