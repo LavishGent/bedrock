@@ -219,7 +219,7 @@ func restrictConcept(pol *policy.Policy, ru policy.Rule, res *analyze.Result, g 
 		if !scope[g.unit[c.Caller]] {
 			continue
 		}
-		if _, isWrapper := closure[c.Caller]; isWrapper {
+		if forwardsToBound(g, closure, c) {
 			continue // reported at the call into the wrapper
 		}
 		target := ""
@@ -282,6 +282,26 @@ func restrictConcept(pol *policy.Policy, ru policy.Rule, res *analyze.Result, g 
 		}
 	}
 	return out
+}
+
+// forwardsToBound reports whether c is the forwarding call of a synthetic
+// wrapper whose origin is bound (policy contract 5: such a call is reported
+// at the call into the wrapper). Ordinary bound functions and instantiated
+// bodies are real code: their calls are always checked.
+func forwardsToBound(g *graph, closure map[string]string, c *facts.CallSite) bool {
+	s := g.sym[c.Caller]
+	if s == nil || s.Kind != "wrapper" || s.OriginID == nil {
+		return false
+	}
+	if _, ok := closure[c.Caller]; !ok {
+		return false
+	}
+	for _, t := range c.Targets {
+		if t == *s.OriginID {
+			return true
+		}
+	}
+	return false
 }
 
 func reasonFor(scope map[string]bool, unit, otherwise string) string {

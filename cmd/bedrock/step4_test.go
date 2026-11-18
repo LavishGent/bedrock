@@ -45,6 +45,7 @@ func failMarkers(t *testing.T, dir string) []string {
 // fixture's expected violations are the lines marked "// FAIL"; relevant
 // lists the indeterminate diagnostics as kind/reason.
 func TestStep4Fixtures(t *testing.T) {
+	twoReflect := []string{"reflection_call/unit_in_scope", "reflection_call/unit_in_scope"}
 	cases := []struct {
 		name     string
 		exit     int
@@ -65,6 +66,28 @@ func TestStep4Fixtures(t *testing.T) {
 		{"helperuncertain", 2, []string{"reflection_call/reachable_from_governed_entry"}, false}, // through an out-of-scope helper
 		{"mixed", 1, []string{"reflection_call/unit_in_scope"}, false},                           // violation + indeterminate gives 1
 		{"emptybinding", 2, []string{"empty_match/policy_config"}, false},                        // empty binding gives 2
+		// Review of 9a70d44, B1: a concept-bound ordinary function, method,
+		// closure body, generic instance, method value or interface target is
+		// still checked; only the synthetic wrapper's forwarding call is not.
+		{"b1ordinary", 1, nil, false},
+		{"b1control", 1, nil, false},
+		{"b1method", 1, nil, false},
+		{"b1closure", 1, nil, false},
+		{"b1generic", 1, nil, false},
+		{"b1boundvalue", 1, nil, false},
+		{"b1interface", 1, nil, false},
+		// B2: reflection is classified from all resolved targets through
+		// synthetic wrappers, and a reflective entry point used as a value is
+		// reported where it is used.
+		{"b2direct", 2, []string{"reflection_call/unit_in_scope"}, false},
+		{"b2interface", 2, []string{"reflection_call/unit_in_scope"}, false},
+		{"b2bound", 2, twoReflect, false},
+		{"b2expression", 2, twoReflect, false},
+		{"b2callslice", 2, twoReflect, false},
+		{"b2argument", 2, twoReflect, false},
+		{"b2field", 2, twoReflect, false},
+		{"b2generic", 2, twoReflect, true}, // the generic origin's t.Call has no target: exempt
+		{"b2pointerexpr", 2, twoReflect, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -79,7 +102,10 @@ func TestStep4Fixtures(t *testing.T) {
 				if v.RuleKind != "restrict_concept_to_boundary" {
 					t.Fatalf("unexpected violation %+v", v)
 				}
-				got = append(got, fmt.Sprintf("%s:%d", v.Location.File, v.Location.Line))
+				l := fmt.Sprintf("%s:%d", v.Location.File, v.Location.Line)
+				if len(got) == 0 || !contains(got, l) { // a generic body and its instance share a line
+					got = append(got, l)
+				}
 			}
 			sort.Strings(got)
 			if want := failMarkers(t, dir); fmt.Sprint(got) != fmt.Sprint(want) {
@@ -113,4 +139,13 @@ func TestStep4Fixtures(t *testing.T) {
 			schemacheck(t, runDocs(t, facts, raw)...)
 		})
 	}
+}
+
+func contains(xs []string, x string) bool {
+	for _, y := range xs {
+		if y == x {
+			return true
+		}
+	}
+	return false
 }

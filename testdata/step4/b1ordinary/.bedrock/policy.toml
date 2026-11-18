@@ -1,0 +1,22 @@
+# Step 4 fixture policy: restrict_concept_to_boundary only.
+version = 1
+module = "example.com/s4/b1ordinary"
+
+[boundary.all]
+packages = ["example.com/s4/b1ordinary/**"]
+
+[boundary.repo]
+packages = ["example.com/s4/b1ordinary/repo/**"]
+
+[concept."database.query"]
+packs = ["go-stdlib-sql"]
+symbols = ["example.com/s4/b1ordinary/handler.Raw"]
+
+[[rule]]
+id = "db-in-repo"
+kind = "restrict_concept_to_boundary"
+scope = "all"
+concept = "database.query"
+boundary = "repo"
+message = "Database queries must run inside repo."
+remediation.message = "Move the query into example.com/s4/b1ordinary/repo."

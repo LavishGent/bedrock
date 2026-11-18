@@ -416,6 +416,15 @@ func (c *callBuilder) build(targetsOf func(ssa.CallInstruction) []*ssa.Function)
 				}
 			}
 		}
+		for _, u := range c.reflectValueUses(fn, targetsOf) {
+			var loc *facts.Location
+			if !noLoc && pkg != nil {
+				loc = c.l.pos(pkg, u.pos)
+			}
+			d := facts.NewDiagnostic("reflection_call", "warning", facts.Str(unit), facts.Str(id),
+				"reflection entry point "+u.name+" used as a value: the code it reaches is not modeled", loc)
+			sh.Diagnostics = append(sh.Diagnostics, d)
+		}
 		if n := unsafeConversions(fn); n > 0 {
 			var loc *facts.Location
 			if !noLoc && pkg != nil {
@@ -447,9 +456,6 @@ func (c *callBuilder) sites(fn *ssa.Function, targetsOf func(ssa.CallInstruction
 			case cc.StaticCallee() != nil:
 				s.mode = "static"
 				s.hint = facts.Str(c.ids.id(cc.StaticCallee()))
-				if reflectCalls[cc.StaticCallee().String()] {
-					s.reflect = cc.StaticCallee().String()
-				}
 			case cc.IsInvoke():
 				s.mode = "invoke"
 				s.hint = facts.Str(cc.Method.FullName())
@@ -458,11 +464,79 @@ func (c *callBuilder) sites(fn *ssa.Function, targetsOf func(ssa.CallInstruction
 			}
 			for _, t := range targetsOf(ci) {
 				s.targets[c.ids.id(t)] = true
+				// Reflection is classified from every resolved target, through
+				// synthetic wrappers: a bound method value, a method
+				// expression or an interface call of (reflect.Value).Call is
+				// still a reflective call at this site.
+				if r := c.reflectEntry(t, targetsOf, 0); r != "" && (s.reflect == "" || r < s.reflect) {
+					s.reflect = r
+				}
 			}
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// reflectValueUses lists the positions where fn uses a reflection entry
+// point (or a wrapper of one) as a value rather than calling it, for example
+// passing reflect.ValueOf(f).Call to another function. The use itself is
+// reported, so a callback invoked from trusted code is not lost.
+func (c *callBuilder) reflectValueUses(fn *ssa.Function, targetsOf func(ssa.CallInstruction) []*ssa.Function) []reflectUse {
+	var out []reflectUse
+	for _, b := range fn.Blocks {
+		for _, ins := range b.Instrs {
+			var callee ssa.Value
+			if ci, ok := ins.(ssa.CallInstruction); ok && !ci.Common().IsInvoke() {
+				callee = ci.Common().Value
+			}
+			for _, op := range ins.Operands(nil) {
+				f, ok := (*op).(*ssa.Function)
+				if !ok || *op == callee {
+					continue
+				}
+				if r := c.reflectEntry(f, targetsOf, 0); r != "" {
+					out = append(out, reflectUse{pos: ins.Pos(), name: r})
+				}
+			}
+		}
+	}
+	return out
+}
+
+type reflectUse struct {
+	pos  token.Pos
+	name string
+}
+
+// reflectEntry returns the reflection entry point fn is, or forwards to
+// through synthetic wrappers ($bound, $thunk, pointer and promotion
+// wrappers, instantiation wrappers), or "".
+func (c *callBuilder) reflectEntry(fn *ssa.Function, targetsOf func(ssa.CallInstruction) []*ssa.Function, depth int) string {
+	if reflectCalls[fn.String()] {
+		return fn.String()
+	}
+	if o := fn.Origin(); o != nil && reflectCalls[o.String()] {
+		return o.String()
+	}
+	if fn.Synthetic == "" || fn.Parent() != nil || depth > 4 || fn.Synthetic == "package initializer" {
+		return ""
+	}
+	best := ""
+	for _, b := range fn.Blocks {
+		for _, ins := range b.Instrs {
+			ci, ok := ins.(ssa.CallInstruction)
+			if !ok {
+				continue
+			}
+			for _, t := range targetsOf(ci) {
+				if r := c.reflectEntry(t, targetsOf, depth+1); r != "" && (best == "" || r < best) {
+					best = r
+				}
+			}
+		}
+	}
+	return best
 }
 
 func unsafeConversions(fn *ssa.Function) int {
