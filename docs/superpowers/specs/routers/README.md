@@ -72,8 +72,8 @@ Every exported function and method of `github.com/go-chi/chi/v5` v5.5.0 (root pa
 | `NewServeMux` | supported | Creates a mux identity. |
 | `(*ServeMux).Handle` | supported | Section 3 covers the direct wrapper form. |
 | `(*ServeMux).HandleFunc` | supported | |
-| `Handle`, `HandleFunc` | supported | Identity `http.DefaultServeMux`. |
-| `DefaultServeMux.Handle/HandleFunc` | supported | Identity `http.DefaultServeMux`. |
+| `Handle`, `HandleFunc` | unsupported_router_form | They register on `http.DefaultServeMux`, a global router outside the supported form (section 2). The route is still recorded. |
+| `DefaultServeMux.Handle/HandleFunc` | unsupported_router_form | A global router, outside the supported form. |
 | `(*ServeMux).Handler`, `(*ServeMux).ServeHTTP` | not registration | |
 | `StripPrefix`, `TimeoutHandler`, `MaxBytesHandler`, `AllowQuerySemicolons` around a registered handler | unsupported_middleware_form | Not of type `func(http.Handler) http.Handler`, so not the direct wrapper form. |
 
@@ -94,7 +94,7 @@ A registration is analyzed only when its receiver is a **supported router value*
 1. The result of exactly one `chi.NewRouter()`/`chi.NewMux()` or `http.NewServeMux()` call in the same function. A Go local variable assigned once from such a call is this SSA value. Such a value is a **mux**.
 2. The first parameter of a function literal passed directly as `fn` to `Route` on a supported chi value. This is a mux (a sub-router).
 3. The first parameter of a function literal passed directly as `fn` to `Group`, or the result of `With(...)` on a supported chi value, chained or held in a local variable assigned once. Such a value is **inline**.
-4. A load of the package variable `http.DefaultServeMux`, or the package functions `http.Handle`/`http.HandleFunc`, which use it implicitly.
+4. (Removed by the supported form.) `http.DefaultServeMux`, and the package functions `http.Handle`/`http.HandleFunc` that use it, are outside the form: `unsupported_router_form`.
 
 Anything else is `unsupported_router_form`:
 
@@ -143,76 +143,64 @@ middleware = "auth.middleware"
 | `internal/api`: `mux.Handle("GET /x/{b}", h.B)` after `mux.Handle("GET /x/{a}", h.A)` | `unsupported_router_form` (same-mux conflict, no fact) | **indeterminate** | not affected |
 | `internal/util`: `func reg(r chi.Router) { r.Get("/z", h.Z) }` | `unsupported_router_form` (receiver is a parameter) | **indeterminate** | **indeterminate** |
 
-### Router value audit: origin and use allowlists (normative)
+### Supported router form (normative)
 
-This rule replaces the earlier "router escape" and tracked-value rules. `internal/analyze/audit.go` implements it.
+**Owner decision, 2026-11-18, after five review rounds.** `require_middleware` is narrowed to one documented form. The whole-module fixed-point audit (coverage summaries, closed helpers, factory summaries) has been deleted. `internal/analyze/audit.go` checks each function on its own, failing closed on anything that is not provably in the form.
 
-The world is closed: a router is trusted only if the analyzer can see **where it was made** (the origin allowlist) and **everything done with it** (the use allowlist). Two facts are computed for every router-bearing SSA value of every module function, by an interprocedural greatest fixed point.
+**The form.** A router is created and fully populated inside **one function**:
 
-**Router-bearing values** are:
+- It is created by a direct call to `chi.NewRouter`, `chi.NewMux` or `http.NewServeMux` in that function, in module code.
+- It is populated with literal route patterns through the recognized operations of section 1:
+  - `Get`, `Post`, `Put`, `Delete`, `Patch`, `Head`, `Options`, `Connect`, `Trace`, `Query` and `Method`;
+  - `(*http.ServeMux).Handle` and `HandleFunc`;
+  - `Use`, `With`, `Group` and `Route`, with middleware written in place as compiler-built varargs.
+- It may then only be:
+  1. **returned** from that function;
+  2. passed **directly to an enumerated serving API**, at its handler position, as a proven concrete `*http.ServeMux` or `*chi.Mux`:
 
-- every value whose type is a router (`*http.ServeMux`, `http.ServeMux`, `*chi.Mux`, `chi.Router`, or an alias of one), or a defined type convertible to one (the same underlying type as `http.ServeMux` or `chi.Mux`, such as `type Mux http.ServeMux`);
-- instruction results, parameters, free variables and **operands**, including globals such as `var G http.ServeMux` used as `&G`;
-- values derived from these by `MakeInterface`, `ChangeInterface`, `ChangeType`, `Convert`, `TypeAssert` or `Phi`;
-- results of audited module factories and parameters of module functions that receive a router-bearing value.
+     | API | Handler argument position |
+     | --- | --- |
+     | `http.ListenAndServe` | 1 |
+     | `http.ListenAndServeTLS` | 3 |
+     | `http.Serve` | 1 |
+     | `http.ServeTLS` | 1 |
+     | `httptest.NewServer` | 0 |
+     | `httptest.NewUnstartedServer` | 0 |
+     | `httptest.NewTLSServer` | 0 |
 
-**Origin allowlist (covered).** A router-bearing value is covered only if it is one of the following:
+     Stored as the `Handler` of a **local `http.Server`** also counts, if the server's fields are only written and it is used only by `ListenAndServe`, `ListenAndServeTLS`, `Serve`, `ServeTLS`, `Shutdown` or `Close`;
+  3. given to a **nested function literal through `Group` or `Route`** by the recognized operation. The literal's parameter is then in the form too.
+- `ServeHTTP` and the read-only chi methods need the proven concrete type. A phi, an interface, or a `chi.Router` value other than the `Group`/`Route` parameter does not have it.
 
-1. a call to a recognized constructor (`chi.NewRouter`, `chi.NewMux`, `http.NewServeMux`) in an analyzed module function;
-2. the result of `With`, `Group` or `Route` on a covered router, or the parameter of a `Group`/`Route` literal on a covered router;
-3. the result of an audited module function whose every return at that index is covered (a factory);
-4. a parameter of a **closed** module function whose every call site passes a covered value. A closed function is unexported, package-level, not a method, and never used as a value.
+**Callers.** A function that creates and returns a router in the form is a "form factory" when every one of its returns, at that result, is a constructor result of its own (directly or through an interface conversion), and it is not exposed by `go:linkname`. A caller of a form factory may **only serve the result directly**: pass it to a serving API, or store it as a local `http.Server` `Handler`. The caller must not register on it, return it, or pass it on. The demo's `main` serves `server.NewAPI(h)` and `server.NewAdmin(h)` this way.
 
-A phi is covered if all its edges are, and a nil constant is neutral. **Every other router-bearing source is uncovered and gives module-wide `unsupported_router_form` at its origin, however it is used later.** Uncovered sources include:
+**Everything else is module-wide `unsupported_router_form` at that point.** That includes:
 
-- a zero-value or `new()` allocation;
-- any global;
-- a parameter of an exported, method, closure or address-taken function;
-- a free variable;
-- a call result from dependency or unanalyzed code (`dep.OpenMux()`, generic instances, methods of dependency types);
-- a field load, index or map read;
-- a type assertion;
-- a value read back from `http.Server.Handler`.
+- parameters;
+- globals, including `http.DefaultServeMux` and `http.Handle`/`HandleFunc`;
+- `new()` and zero-value allocations;
+- field, index and map loads;
+- type assertions;
+- conversions to other types, `any`, `unsafe.Pointer` and `reflect`;
+- call results of anything other than a form factory: dependency code, module helpers, and factories with mixed, recursive or variadic returns;
+- closure capture outside `Group`/`Route`;
+- storage;
+- passing to any other call, including module helpers (`serve(m)`, `s.Serve(m)` and `f := s.Serve; f(m)` are all **rejected**);
+- `http.Server.Handler` other than the local, only-served server;
+- any function exposed through `//go:linkname`.
 
-**Proof (`proven`).** A value is proven only if it is covered **and** its concrete type is exactly `*http.ServeMux` or `*chi.Mux`, which excludes defined types and embedding wrappers. The proof survives `MakeInterface` and `ChangeInterface`, and closed helpers and factories whose every flow is proven. A phi, an interface or `chi.Router` parameter of an open function, and a defined type never have it.
+There are no interprocedural coverage summaries. The only whole-module fact is a monotone boolean, "may this function return a router". It is used only to recognize a router-bearing call result whose static type is an interface, so that such a value is checked rather than ignored.
 
-**Use allowlist.** Every use of a router-bearing value must be one of these:
+**Not covered.** An `http.Handler` produced by a dependency that never carries a module-created router (for example `dep.OpenHandler()` served directly) is the dependency's own handler. It is outside the module's route registrations and is not inspected. A module factory that may return a router on any path is inspected, and a mixed one is rejected.
 
-1. the **receiver of a recognized registration operation**: route registration, `Use`, `With`, `Group`, `Route`, or `Mount` (which is diagnosed as unsupported separately). `ServeHTTP`, `(*http.ServeMux).Handler` and the read-only chi methods (`Routes`, `Middlewares`, `Match`, `Find`, ...) are checked first and require a **proven** receiver;
-2. **returned** to the caller;
-3. the **handler argument, in its exact position**, of a serving API, with a **proven** value:
+**Regressions**, in `cmd/bedrock/audit_test.go` and `probes_test.go`. Every bypass regression asserts exit 2, or exit 1 for a precise violation, and each is backed by a real `httptest` request where it applies:
 
-   | API | Handler argument position |
-   | --- | --- |
-   | `http.ListenAndServe` | 1 |
-   | `http.ListenAndServeTLS` | 3 |
-   | `http.Serve` | 1 |
-   | `http.ServeTLS` | 1 |
-   | `httptest.NewServer` | 0 |
-   | `httptest.NewUnstartedServer` | 0 |
-   | `httptest.NewTLSServer` | 0 |
+- the nine origin-review modules;
+- the 40 adversarial variants;
+- the earlier rounds;
+- the seven fresh variants of the review of `1acec5b` (`TestSupportedFormFreshVariants`, `TestSupportedFormLinkname`).
 
-4. stored as the **`Handler` of a local `http.Server`**, with a proven value, as a composite literal or a field store. The server must be a local allocation whose fields are only written, never read, and which is used only as the receiver of `ListenAndServe`, `ListenAndServeTLS`, `Serve`, `ServeTLS`, `Shutdown` or `Close`. Returning it, passing it, storing it, copying it, capturing it, taking a method value of it, or reading its `Handler` is not allowed;
-5. a **read-only** use: a debug reference or an `==`/`!=` comparison;
-6. an argument to an **analyzed module function** whose corresponding parameter is tracked, so that the callee is audited; or an interface-preserving conversion or phi, which is audited in turn. A `ChangeType` is allowed only to a recognized router type.
-
-**Every other use is module-wide `unsupported_router_form`.** That includes passing to a dependency, a generic instance, a function value or an interface method; `reflect`; `unsafe`; storing into a variable, field, slice, map, channel or global; capture by a closure or a method value; and conversion to another defined type. No callback signatures are recognized.
-
-**Conservative limitations.** These are documented, not violations of the rule:
-
-- **Bound method values.** A bound method value of a module method, `f := s.Serve; f(m)`, is rejected: the call goes through a generated `$bound` wrapper that is not audited. The direct call `s.Serve(m)` is accepted when its parameter is tracked.
-- **Routers in globals.** A router stored in a package-level variable is rejected, including in initializers (fixture `testdata/routerinit`).
-- **Stdlib wrappers.** A router wrapped by a stdlib handler (`http.StripPrefix`, `http.TimeoutHandler`) is rejected.
-- **Non-router handlers.** An `http.Handler` produced by a dependency that is not router-typed is a dependency's own handler. It is outside the module's route registrations and is not tracked.
-
-**Regressions** in `cmd/bedrock/audit_test.go`:
-
-| Test | Covers |
-| --- | --- |
-| `TestRouterOriginCodexModules` | the nine review modules, each with a real request proving HTTP 200 unauthenticated |
-| `TestRouterOriginAdversarial` | ten variants per blocker class: sources, server storage, dispatch and sink proof, dependency producers |
-| `TestRouterAuditCodexSources`, `TestRouterAuditAdversarial` | earlier rounds |
-| `TestRouterAuditNoFalsePositives`, `TestRouterOriginLocalServerNoFalsePositive` | ordinary code (local build, register, return, `ListenAndServe`, a local `http.Server`, closed helpers) stays exit 0 |
+The no-false-positive tests are `TestRouterAuditNoFalsePositives` and `TestRouterOriginLocalServerNoFalsePositive`. In them, a single function that builds, registers and returns a router, and a caller that serves it through `ListenAndServe` or a local `http.Server`, stay exit 0.
 
 ## 3. Handlers and the direct wrapper form
 
@@ -449,7 +437,7 @@ r.Get("/x", h.X)                                      // receiver merged at a ph
   - the receiver-first form (router, string pattern, handler), for example `reg(r, "/p", h)` with `reg` bound to `(*chi.Mux).Get` by an external caller;
   - any such dynamic call that receives a router-typed value;
   - a static call into code outside the analyzed module (other than chi and net/http) that receives a router-typed value, including a router-typed function parameter.
-- **Registration APIs used as values.** `http.Handle`/`HandleFunc`, the `ServeMux` methods, and chi's registration methods (including method expressions and thunks) are allowed only as the callee of a direct call. Used as a value (`var register = http.HandleFunc`, passed as an argument, stored), they give `unsupported_router_form`, module-wide. A local alias called in the same function (`f := http.HandleFunc; f(...)`) compiles to a direct call and is recognized precisely.
+- **Registration APIs used as values.** (`http.Handle`/`HandleFunc` are now outside the form altogether; see the supported form in section 2.) The `ServeMux` methods, and chi's registration methods (including method expressions and thunks) are allowed only as the callee of a direct call. Used as a value (`var register = http.HandleFunc`, passed as an argument, stored), they give `unsupported_router_form`, module-wide. A local alias called in the same function (`f := http.HandleFunc; f(...)`) compiles to a direct call and is recognized precisely.
 - **Middleware lists** are credited only from the compiler's in-place varargs array. Each element must be stored exactly once, in the call's block before the call, and the array and slice may have no other use. A user-created slice (`ms := []func(...){Auth}; r.Use(ms...)`), an overwritten element (conditional or not), or a spread or computed slice gives `unsupported_middleware_form`, so the chain is uncertain and nothing is credited. This applies to `Use` and `With`.
 - **Owning symbols.** Every function named by `registered_in` or by a diagnostic is an emitted symbol of its unit. That includes the synthesized `pkg.init` and declared `pkg.init#n`, since go/types does not declare them (fixture `testdata/routerinit`).
 

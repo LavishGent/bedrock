@@ -308,3 +308,48 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
 schemacheck: exit 0 over 388 documents, 0 failures
 ```
+
+## Supported router form (owner decision after five review rounds)
+
+`require_middleware` is narrowed to one documented form, normative in `../routers/README.md` ("Supported router form") and recorded in the plan. A router is created by a direct `chi.NewRouter`, `chi.NewMux` or `http.NewServeMux` call and fully populated inside one function. It may only be returned, passed directly to an enumerated serving API (or a local, only-served `http.Server`), or handed to a `Group`/`Route` literal. A caller may only serve the result of a form factory directly. Everything else is module-wide `unsupported_router_form`.
+
+**What changed in the code:**
+
+- **Deleted.** The whole-module greatest-fixed-point audit is gone: coverage and proof summaries, closed helpers, factory summaries, and the helper-parameter taint.
+- **Kept.** `internal/analyze/audit.go` keeps per-function origin and use checks. The only whole-module fact is a monotone "may return a router" boolean, which makes interface-typed router results visible at their call sites.
+- **New rejections:**
+  - `http.Handle`/`HandleFunc` (`DefaultServeMux`); the route is still recorded;
+  - functions exposed through `//go:linkname`;
+  - every helper or factory flow that is not a single-function form factory.
+- **Demo.** It already fits the form: `NewAPI` and `NewAdmin` each build and return their router, and `main` serves the results directly. No change was needed.
+- **Stale docs.** The README claim that `s.Serve(m)` is accepted was wrong: helpers and methods taking routers are rejected. It now says so.
+
+**Regressions.** Every bypass regression asserts exit 2, or a precise exit 1, and is backed by a real `httptest` request where it applies:
+
+- the nine origin-review modules;
+- the 40 adversarial variants;
+- all earlier rounds' sources and probes;
+- the seven fresh variants of the review of `1acec5b`: `mixed_factory`, `mixed_closed_helper`, `mixed_open_factory`, `open_external_param`, `recursive_factory_unknown`, `closed_variadic` (`TestSupportedFormFreshVariants`), and `linkname_closed` (`TestSupportedFormLinkname`, an actual cross-module `go:linkname`).
+
+**Tests rewritten for the narrower scope:**
+
+- The helper-based no-false-positive cases now expect exit 2: `serve-helper-rejected` and `helper-factory-rejected`.
+- `S2-init-registration` uses `http.Handle`, so it now expects exit 2.
+- The conditional fixture annotates `register(r)` in `Helper`.
+
+**No false positives.** A single function that builds, registers and returns a router, and is served through `ListenAndServe`, `httptest.NewServer` or a local `http.Server`, stays exit 0. So do direct `ServeHTTP` calls on a proven local router.
+
+**Results:**
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant [('unsupported_router_form', 'example.com/routerinit'), ('unsupported_router_form', 'example.com/routerinit'), ('unsupported_router_form', 'example.com/routerinit')]
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
+schemacheck: exit 0 over 388 documents, 0 failures
+```
