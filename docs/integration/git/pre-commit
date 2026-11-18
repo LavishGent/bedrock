@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Example only. git pre-commit hook for bedrock. Install with:
+#   cp docs/integration/git/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# It analyzes the working tree (not only the staged snapshot), so stage or
+# stash everything you mean to commit first. Exit 1 (VIOLATION) and exit 2
+# (INDETERMINATE: uncertainty, not a pass) both block the commit.
+set -u
+root=$(git rev-parse --show-toplevel) || exit 2
+"${BEDROCK_CHECK:-$root/docs/integration/hooks/bedrock-check.sh}"
+code=$?
+if [ "$code" -ne 0 ]; then
+	echo "pre-commit: bedrock check exited $code; commit blocked. Report: ${BEDROCK_REPORT:-.bedrock-report.json}" >&2
+	exit 1
+fi

@@ -1,0 +1,127 @@
+# EXAMPLE ONLY. This file is not an enabled workflow: GitHub runs only files
+# under .github/workflows/. To adopt it, copy it to .github/workflows/bedrock.yml
+# in the repository being checked (CODEOWNERS already protects that directory),
+# fill in the pinned values marked REPLACE, and make the "bedrock" job a
+# required status check in branch protection (required checks are configured
+# in the repository settings, not in this file).
+#
+# It implements the trust boundary of the POC plan, section 9:
+#   - policy and bindings (.bedrock/, packs/) come from the BASE branch, never
+#     from the pull request;
+#   - the bedrock binary is a pinned, checksummed release asset, never built
+#     from the pull request;
+#   - Go is pinned to go1.26.11 and the build environment is controlled
+#     (bedrock itself also pins GOOS/GOARCH, CGO_ENABLED=0, GOFLAGS, GOWORK,
+#     GOTOOLCHAIN=local, GOENV=off and GOPACKAGESDRIVER=off for the analysis).
+#
+# Verdicts: exit 0 PASS passes the check; exit 1 VIOLATION and exit 2
+# INDETERMINATE fail it. Exit 2 means uncertainty, not a pass.
+#
+# Limits that any enforcement claim must state:
+#   - require_middleware is ADVISORY against adversarial code. It is sound for
+#     module code in the supported router form, but a dependency or
+#     //go:linkname that deliberately mutates a module-created router can evade
+#     it (known limits L1 and L2, docs/superpowers/specs/routers/README.md).
+#   - Bedrock checks that approved middleware is structurally attached, not
+#     what it does; the demo's auth behavior tests cover that.
+#   - restrict_concept_to_boundary trusts the pinned standard library
+#     (owner decision A); the report lists that assumption with counts.
+#
+# For the bedrock repository's OWN CI (not this check), run its tests with
+#   go test -timeout 30m ./...
+# The cmd/bedrock suite takes about 8.5 minutes, close to go test's default
+# 10-minute per-package timeout.
+
+name: bedrock (example)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # REPLACE with the pinned release and the SHA-256 of its linux/amd64 asset.
+  BEDROCK_VERSION: v0.0.0-poc
+  BEDROCK_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
+  BEDROCK_URL: https://github.com/LavishGent/bedrock/releases/download/v0.0.0-poc/bedrock-linux-amd64
+  # REPLACE with the module directory to analyze, relative to the repo root.
+  BEDROCK_MODULE: .
+
+jobs:
+  bedrock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # The pull request's code is analyzed, never executed: bedrock loads it
+      # with go/packages and builds SSA; it does not run tests or generators.
+      # Pin third-party actions to full commit SHAs in real use.
+      - name: Check out the pull request (code under analysis)
+        uses: actions/checkout@v4
+        with:
+          path: pr
+          persist-credentials: false
+
+      - name: Check out policy and bindings from the base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+          sparse-checkout: |
+            .bedrock
+            packs
+          sparse-checkout-cone-mode: false
+
+      - name: Install the pinned Go toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.11"
+          cache: false
+
+      - name: Download the pinned bedrock release and verify its checksum
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bedrock"
+          curl --fail --silent --show-error --location --proto '=https' \
+            --output "$RUNNER_TEMP/bedrock/bedrock" "$BEDROCK_URL"
+          echo "$BEDROCK_SHA256  $RUNNER_TEMP/bedrock/bedrock" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/bedrock/bedrock"
+
+      - name: Download module dependencies (read-only module mode)
+        working-directory: pr/${{ env.BEDROCK_MODULE }}
+        env:
+          GOFLAGS: -mod=readonly
+          GOWORK: "off"
+          GOTOOLCHAIN: local
+        run: go mod download
+
+      - name: bedrock check (policy from the base branch)
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -uo pipefail
+          "$RUNNER_TEMP/bedrock/bedrock" check \
+            --policy base/.bedrock/policy.toml \
+            --out bedrock-report.json \
+            --facts-dir bedrock-facts \
+            "pr/$BEDROCK_MODULE"
+          code=$?
+          case "$code" in
+            0) echo "bedrock: PASS" ;;
+            1) echo "::error::bedrock: VIOLATION (see bedrock-report.json)" ;;
+            2) echo "::error::bedrock: INDETERMINATE - uncertainty, not a pass (see bedrock-report.json)" ;;
+            *) echo "::error::bedrock: unexpected exit $code" ;;
+          esac
+          jq -r '.violations[] | "::error file=\(.location.file // ""),line=\(.location.line // 1)::\(.rule_id): \(.message)"' bedrock-report.json || true
+          exit "$code"
+
+      - name: Upload the report and facts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedrock-report
+          path: |
+            bedrock-report.json
+            bedrock-facts/analysis.json
+          if-no-files-found: warn
