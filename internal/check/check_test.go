@@ -12,7 +12,7 @@ func unit(id, origin string, imports ...string) *analyze.UnitInfo {
 	u := &analyze.UnitInfo{Origin: origin, Shard: &facts.Shard{Unit: facts.Unit{ID: id}}}
 	for i, to := range imports {
 		u.Imports = append(u.Imports, facts.Import{FromUnit: id, ToUnit: to, ToPath: to,
-			Loc: facts.Location{Root: "repo", File: id + ".go", Line: 3 + i, Column: 2}})
+			Loc: &facts.Location{Root: "repo", File: id + ".go", Line: 3 + i, Column: 2}})
 	}
 	return u
 }

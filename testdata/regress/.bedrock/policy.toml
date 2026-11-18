@@ -1,0 +1,28 @@
+# Regression fixture policy (Codex step 2 review, B2 and B3).
+version = 1
+module = "example.com/regress"
+
+[boundary.all]
+packages = ["example.com/regress/**"]
+
+[boundary.unsafe]
+packages = ["unsafe"]
+
+[boundary.forbidden]
+packages = ["example.com/regress/forbidden"]
+
+[[rule]]
+id = "no-forbidden-import"
+kind = "forbid_import"
+scope = "all"
+target = "forbidden"
+message = "Nothing may import example.com/regress/forbidden."
+remediation.message = "Remove the import."
+
+[[rule]]
+id = "no-unsafe"
+kind = "forbid_import"
+scope = "all"
+target = "unsafe"
+message = "Module code must not import unsafe."
+remediation.message = "Remove the unsafe import."

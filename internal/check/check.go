@@ -2,11 +2,11 @@
 // module, evaluate the rules this build supports, and assemble the report
 // (report.schema.json, schema 0.3) and the unit shards.
 //
-// Step 2 evaluates forbid_import only. require_middleware and
-// restrict_concept_to_boundary rules are validated (fail closed) but not
-// evaluated; schema 0.3 has no way to mark a rule "not evaluated", so they are
-// left out of rules[] and returned in Output.NotEvaluated for the CLI to
-// report on stderr.
+// Step 2 evaluates forbid_import only. Every configured rule is listed in
+// rules[]; a rule of a kind this build cannot evaluate (require_middleware,
+// restrict_concept_to_boundary) gets a global rule_not_evaluated diagnostic
+// that makes it INDETERMINATE (schema 0.4), so the run exits 2 unless a real
+// violation gives 1. It never reports PASS for an unchecked rule.
 package check
 
 import (
@@ -65,10 +65,8 @@ func PolicyOnly(label string, sum *string, d facts.Diagnostic, rules []policy.Ru
 	r := newReport(label, sum)
 	r.Diagnostics = append(r.Diagnostics, global(d))
 	for _, ru := range rules {
-		if Evaluated(ru.Kind) {
-			r.Rules = append(r.Rules, facts.RuleResult{ID: ru.ID, Kind: ru.Kind, Status: "INDETERMINATE",
-				ViolationIDs: []string{}, DiagnosticIDs: []string{}})
-		}
+		r.Rules = append(r.Rules, facts.RuleResult{ID: ru.ID, Kind: ru.Kind, Status: "INDETERMINATE",
+			ViolationIDs: []string{}, DiagnosticIDs: []string{}})
 	}
 	finish(r)
 	return r
@@ -83,11 +81,8 @@ func Run(ctx context.Context, o Options) *Output {
 	}
 	pol := pr.Policy
 	out := &Output{}
-	var rules []policy.Rule
 	for _, ru := range pol.Rules {
-		if Evaluated(ru.Kind) {
-			rules = append(rules, ru)
-		} else {
+		if !Evaluated(ru.Kind) {
 			out.NotEvaluated = append(out.NotEvaluated, ru)
 		}
 	}
@@ -99,9 +94,12 @@ func Run(ctx context.Context, o Options) *Output {
 	}
 	r.Inputs.ShardCount = len(out.Shards)
 	r.Packages.Included = append(r.Packages.Included, res.Module...)
+	r.Packages.Excluded = append(r.Packages.Excluded, res.Excluded...)
+	r.Packages.ExcludedFiles = append(r.Packages.ExcludedFiles, res.ExcludedFiles...)
 	for _, id := range res.Module {
 		r.Packages.ExcludedFiles = append(r.Packages.ExcludedFiles, res.Units[id].Shard.Unit.ExcludedFiles...)
 	}
+	sort.Slice(r.Packages.Excluded, func(i, j int) bool { return r.Packages.Excluded[i].ID < r.Packages.Excluded[j].ID })
 	sort.Slice(r.Packages.ExcludedFiles, func(i, j int) bool {
 		return r.Packages.ExcludedFiles[i].Path < r.Packages.ExcludedFiles[j].Path
 	})
@@ -124,9 +122,14 @@ func Run(ctx context.Context, o Options) *Output {
 		}
 	}
 
-	for _, ru := range rules {
+	for _, ru := range pol.Rules {
 		rr := facts.RuleResult{ID: ru.ID, Kind: ru.Kind, ViolationIDs: []string{}, DiagnosticIDs: []string{}}
-		if !res.Fatal {
+		if !Evaluated(ru.Kind) {
+			d := facts.NewDiagnostic("rule_not_evaluated", "error", nil, nil,
+				fmt.Sprintf("rule %q (%s) is not evaluated by this build (bedrock %s evaluates forbid_import only); it cannot pass until it is.", ru.ID, ru.Kind, ToolVersion), nil)
+			diags = append(diags, facts.ReportDiagnostic{Diagnostic: d, AffectsRules: []facts.AffectedRule{}})
+			affects[d.ID] = append(affects[d.ID], facts.AffectedRule{RuleID: ru.ID, Reason: "not_evaluated"})
+		} else if !res.Fatal {
 			vs, extra, scope := forbidImport(pol, ru, res)
 			r.Violations = append(r.Violations, vs...)
 			for _, v := range vs {
@@ -212,11 +215,10 @@ func forbidImport(pol *policy.Policy, ru policy.Rule, res *analyze.Result) ([]fa
 			if !target[im.ToUnit] {
 				continue
 			}
-			loc := im.Loc
 			v := facts.Violation{
-				RuleID: ru.ID, RuleKind: ru.Kind, Location: &loc,
+				RuleID: ru.ID, RuleKind: ru.Kind, Location: im.Loc,
 				Message:       fmt.Sprintf("%s (%s imports %s)", ru.Message, u, im.ToUnit),
-				EvidenceChain: []facts.EvidenceStep{{Kind: "import", From: u, To: im.ToUnit, Loc: &loc}},
+				EvidenceChain: []facts.EvidenceStep{{Kind: "import", From: u, To: im.ToUnit, Loc: im.Loc}},
 				Remediation:   facts.Remediation{Message: ru.Remediation.Message, Suggest: nonNil(ru.Remediation.Suggest)},
 			}
 			v.ID = facts.ViolID(v)
@@ -257,22 +259,14 @@ func finish(r *facts.Report) {
 		}
 		return a.ID < b.ID
 	})
-	sort.Slice(r.Violations, func(i, j int) bool {
-		a, b := r.Violations[i], r.Violations[j]
-		if a.RuleID != b.RuleID {
-			return a.RuleID < b.RuleID
+	// (rule_id, file, line, column, id); a null location sorts first.
+	key := func(v facts.Violation) string {
+		if v.Location == nil {
+			return v.RuleID + "\x00\x00" + v.ID
 		}
-		if a.Location.File != b.Location.File {
-			return a.Location.File < b.Location.File
-		}
-		if a.Location.Line != b.Location.Line {
-			return a.Location.Line < b.Location.Line
-		}
-		if a.Location.Column != b.Location.Column {
-			return a.Location.Column < b.Location.Column
-		}
-		return a.ID < b.ID
-	})
+		return fmt.Sprintf("%s\x00\x01%s\x00%012d\x00%012d\x00%s", v.RuleID, v.Location.File, v.Location.Line, v.Location.Column, v.ID)
+	}
+	sort.Slice(r.Violations, func(i, j int) bool { return key(r.Violations[i]) < key(r.Violations[j]) })
 	global, indet, warn := 0, 0, 0
 	byRule := map[string][]string{}
 	for _, d := range r.Diagnostics {

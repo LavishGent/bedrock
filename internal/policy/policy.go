@@ -91,7 +91,23 @@ var (
 	conceptName  = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
 	ruleID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
 	methodToken  = regexp.MustCompile(`^[A-Za-z]+$`)
+
+	// symbolIDGrammar is the canonical ID of a function or method a concept
+	// may bind (schema README, Symbol IDs): "importpath.Func",
+	// "(importpath.Type).Method" or "(*importpath.Type).Method". The import
+	// path is "/"-separated elements of letters, digits and ._~+-; names are
+	// Go identifiers. Closures, wrappers and instances are not bindable.
+	symbolIDGrammar = regexp.MustCompile(`^(?:` + importPathRE + `\.` + identRE +
+		`|\(\*?` + importPathRE + `\.` + identRE + `\)\.` + identRE + `)$`)
 )
+
+const (
+	importPathRE = `[\pL\pN_.~+-]+(?:/[\pL\pN_.~+-]+)*`
+	identRE      = `[\pL_][\pL\pN_]*`
+)
+
+// ValidSymbolID reports whether s is a canonical bindable symbol ID.
+func ValidSymbolID(s string) bool { return symbolIDGrammar.MatchString(s) }
 
 // policyLoc returns the location of a policy parse error.
 func policyLoc(path string, line, col int) *facts.Location {
@@ -267,9 +283,9 @@ func Parse(raw []byte, path, modulePath string) (*Policy, string, string, *facts
 					v.errf("%s: pack %q has no binding for concept %q", where, pk, name)
 				}
 			}
-			for _, s := range c.Symbols {
-				if s == "" || strings.TrimSpace(s) != s || strings.ContainsAny(s, "\t\r\n") {
-					v.errf("%s: malformed symbol ID %q", where, s)
+			for _, s := range c.Symbols { // every bound symbol, used by a rule or not
+				if !ValidSymbolID(s) {
+					v.errf("%s: malformed symbol ID %q (want importpath.Func, (importpath.Type).Method or (*importpath.Type).Method)", where, s)
 				}
 			}
 			p.Concepts[name] = c
@@ -282,6 +298,10 @@ func Parse(raw []byte, path, modulePath string) (*Policy, string, string, *facts
 	case nil:
 	case []map[string]any:
 		list = r
+	case []any:
+		if len(r) > 0 { // "rule = []" is zero rules: policy_no_rules below
+			v.errf("rule must be an array of tables ([[rule]])")
+		}
 	default:
 		if ok {
 			v.errf("rule must be an array of tables ([[rule]])")

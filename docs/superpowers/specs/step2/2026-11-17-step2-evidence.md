@@ -1,6 +1,6 @@
 # Step 2 evidence: analyzer, policy parser, forbid_import, report
 
-**Date:** 2026-11-17
+**Date:** 2026-11-17, revised 2026-11-18 after the Codex step 2 review. Owner decision: fail closed now; a release or CI gate is not a substitute.
 **Plan:** `../2026-11-17-bedrock-poc-plan.md`, section 8, step 2
 
 ## What was built
@@ -9,53 +9,91 @@ The analyzer lives in the root module (`github.com/LavishGent/bedrock`).
 
 | Path | Role |
 | --- | --- |
-| `cmd/bedrock` | The CLI: `bedrock check [--policy FILE] [--format json] [--out FILE] [--facts-dir DIR] [--timeout 120s] [--mem-limit-mib 4096] [MODULE_DIR]`. It writes the JSON report to stdout (or `--out`). `--facts-dir` also writes one unit shard per unit under `DIR/shards/`. Exit codes follow the verdict table. A watchdog turns a timeout, a memory-limit breach or a panic into a run-level (`global`) `analyzer_timeout`, `analyzer_memory_limit` or `analyzer_crash` report, with exit 2. |
-| `internal/analyze` | Loads one module with `go/packages` under the pinned profile: go1.26.11 (checked with `go env GOVERSION`), linux/amd64, `CGO_ENABLED=0`, no tags, `GOFLAGS=-mod=readonly`, `GOWORK=off`, `GOTOOLCHAIN=local`. It rejects unsupported layouts with a global `unsupported_layout` error: no `go.mod` at the module root, a vendor directory, or a toolchain mismatch. A `go.work` file is reported as a warning and ignored. Each unit in the import closure becomes a schema 0.3 shard, built as follows: |
-| | **Origin** comes from loader provenance: no owning module means `stdlib`; the main module means `module`; anything else means `dependency`. It is never inferred from the path, and `spike/schemacheck` cross-checks it against `schema/stdlib-go1.26.11.txt`. |
-| | **Files and hashes:** compiled files with sha256, excluded files with reasons, the content hash, and dependency hashes. |
-| | **Symbols** from `go/types`: functions, methods, types and vars, with `has_body` read from syntax and `address_taken` computed across all packages. A duplicate symbol ID is a global `symbol_id_collision`. |
-| | **Imports** with locations, and **load diagnostics** (`package_load_error`, `parse_or_type_error`). |
-| `internal/policy` | Parses and validates `.bedrock/policy.toml` against policy contract v1, failing closed. Missing file, syntax error, wrong type, unknown key at any depth (including a key of another rule kind), unknown kind, malformed or duplicate ID, undefined reference, bad glob or route pattern, unknown pack, version other than 1, and module mismatch all give one global diagnostic: `policy_missing`, `policy_invalid` or `policy_no_rules`. The report then has `rules: []` and exit code 2. |
+| `cmd/bedrock` | The CLI (below). |
+| `internal/analyze` | The pinned loader: environment control, provenance, units and shards. |
+| `internal/policy` | Parses and validates the policy against contract v1, failing closed (below). |
 | `internal/glob` | Import-path globs (contract section 3). `**` matches the package root. |
-| `internal/check` | Evaluates `forbid_import` (contract section 6.1): scope projected to module units, `except_from`, self-import of the target allowed, direct imports only, `empty_match` for empty referenced boundaries (rule-specific, `policy_config`). Load errors in governed units affect the rule (`unit_in_scope`). It assembles the report with deterministic ordering and verdicts. |
+| `internal/check` | Evaluates `forbid_import`, decides relevance, assembles the report with deterministic ordering, and computes verdicts and exit codes. |
 
-**Not in this step:** `require_middleware` and `restrict_concept_to_boundary` are validated (fail closed) but **not evaluated**. Schema 0.3 has no way to mark a rule "not evaluated": `rules[].status` is `PASS`, `VIOLATION` or `INDETERMINATE`, and no diagnostic kind fits. So, rather than inventing a status:
+### `cmd/bedrock`
 
-- such rules are left out of `rules[]`, and the CLI names each one on stderr;
-- a policy with no evaluable rule fails closed, with exit 2 and no report, instead of reporting `PASS` for unchecked rules.
+```
+bedrock check [--policy FILE] [--format json] [--out FILE] [--facts-dir DIR] [--timeout D] [--mem-limit-mib N] [MODULE_DIR]
+```
 
-This gap is reported to the coordinator. Call sites, routes and middleware stay empty in shards until steps 3 and 4.
+- **Supervised child process (S3).** Analysis runs in a child process of the same binary. The parent turns the child's failures into a run-level (`global`) report, exit 2, built from what the parent observed:
+  - a panic in any goroutine, or a non-zero exit, becomes `analyzer_crash`, with the panic line taken from captured stderr;
+  - passing the wall clock becomes `analyzer_timeout`, and the child is killed;
+  - a memory breach becomes `analyzer_memory_limit`. The child's own watchdog exits with status 86, or the parent sees peak RSS from rusage above the limit.
+- **Limits are validated:** `0 < timeout <= 1h` and `64 <= mem-limit-mib <= 1048576`.
+- **A report is always written.**
 
-No analysis manifest is emitted. Its `universe` and `entry` fields need the SSA universe and call graph of step 4, so `inputs.manifest_sha256` is `null`.
+### `internal/analyze`
+
+- **Controlled environment (S1).** The loader uses only the caller's cache and proxy variables (`GOPATH`, `GOMODCACHE`, `GOCACHE`, `GOPROXY` and the like). It drops `GOROOT`, `GOFLAGS`, `GOEXPERIMENT`, `GOAMD64`, `CC` and every other `GO*` or `CGO_*` variable, and pins the rest: `GOOS=linux`, `GOARCH=amd64`, `GOAMD64=v1`, `CGO_ENABLED=0`, `GOFLAGS=-mod=readonly`, `GOWORK=off`, `GOTOOLCHAIN=local`, `GOENV=off`, `GOEXPERIMENT=`, `GOPACKAGESDRIVER=off`.
+- **Toolchain check.** Each run verifies `go env GOVERSION = go1.26.11`. It also checks that live `go list std` output matches the embedded inventory, which a test keeps byte-identical to `schema/stdlib-go1.26.11.txt`.
+- **Provenance (S1).** The origin of each unit is checked in the production loader:
+  - `module` requires `Module.Main` with the module dir equal to the analyzed root, or a path inside the main module path;
+  - `dependency` is any other module;
+  - `stdlib` requires no module, an entry in the inventory, and a directory under GOROOT/src;
+  - otherwise the unit is `unresolved`;
+  - any contradiction is a global `unsupported_layout` error.
+- **Every package is a unit (B2).** `unsafe` is a `builtin` unit. A package that cannot be loaded is a `missing` unit carrying its load error, and its origin is `module` if its path is inside the main module. Load errors are recorded before the source status is decided. Import edges are never dropped: a target that was not loaded becomes a missing unit.
+- **Physical locations (B3).** Locations use `PositionFor(pos, false)`, so `//line` directives cannot move or drop evidence. An unmappable location gives `loc: null`, and the import is kept.
+- **Excluded coverage (S4).** A walk of the module tree reports every directory with Go files that is not analyzed: `build_constraint`, `test_only`, `outside_module` (nested `go.mod`) or `ignored_by_go` (testdata, `.`, `_`). The non-analyzed files go into `excluded_files`. A walk error is a fatal `unsupported_layout`. A `vendor/` directory, a missing `go.mod` and a toolchain mismatch also fail closed.
+
+### `internal/policy`
+
+- **S2:** concept symbols must match the canonical symbol-ID grammar, whether or not a rule uses them. `???` is rejected.
+- **N1:** `rule = []` gives `policy_no_rules`.
+
+### Rules this build does not evaluate (B1, schema 0.4)
+
+Every configured rule is listed. A rule of a kind this build does not evaluate (`require_middleware`, `restrict_concept_to_boundary`) gets a global `rule_not_evaluated` diagnostic: relevance `indeterminate`, reason `not_evaluated`. The rule is therefore `INDETERMINATE`, and the run exits 2 unless a real violation gives 1. So `demo/clean` exits 2 until steps 3 and 4 land, and `demo/violating` still exits 1.
+
+No analysis manifest is emitted yet: its `universe` and `entry` fields need the step 4 call graph, so `inputs.manifest_sha256` is `null`.
 
 ## Results
 
-Commands run from the repository root with go1.26.11:
+From the repository root, with go1.26.11:
 
 ```
-demo/clean: exit 0 PASS rules [('auth-private-import', 'PASS')] violations [] shards 197
-demo/violating: exit 1 VIOLATION rules [('auth-private-import', 'VIOLATION')] violations [('auth-private-import', 'internal/billing/billing.go:9:2')] shards 197
-testdata/broken: exit 2 INDETERMINATE violations 0 [('package_load_error', 'example.com/broken/b', 'b/b.go:6:8', 'indeterminate', [{'rule_id': 'no-a-root-import', 'reason': 'unit_in_scope'}])]
-bedrock: rule "routes-require-auth" (require_middleware) is valid but NOT EVALUATED: this build evaluates forbid_import only (plan step 2)
-bedrock: rule "db-in-repo" (restrict_concept_to_boundary) is valid but NOT EVALUATED: this build evaluates forbid_import only (plan step 2)
+demo/clean: exit 2 INDETERMINATE rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'INDETERMINATE')] violations [] relevant diagnostics [('rule_not_evaluated', None), ('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'INDETERMINATE')] violations [('auth-private-import', 'internal/billing/billing.go:9:2')] relevant diagnostics [('rule_not_evaluated', None), ('rule_not_evaluated', None)]
+testdata/broken: exit 2 INDETERMINATE rules [('no-a-root-import', 'INDETERMINATE')] violations [] relevant diagnostics [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] violations [('no-forbidden-import', 'lined/lined.go:7:8'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5:8')] relevant diagnostics []
+testdata/regress-missing: exit 2 INDETERMINATE rules [('no-user-import', 'INDETERMINATE')] violations [] relevant diagnostics [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+two runs of demo/violating (report + 198 shards): byte-identical
 ```
 
 The commands were:
 
 - `bedrock check --policy .bedrock/policy.toml demo/clean`
 - `bedrock check --policy .bedrock/policy.toml demo/violating`
-- `bedrock check testdata/broken`, which uses that fixture's own policy
+- `bedrock check testdata/broken`
+- `bedrock check testdata/regress`
+- `bedrock check testdata/regress-missing`
 
-The billing import is the only `forbid_import` violation in `demo/violating`. The other two seeded violations belong to rules this step does not evaluate.
+Each fixture uses its own `.bedrock/policy.toml` unless `--policy` is given.
 
-Tests (`go test ./...` in the root module) cover the following:
+## Codex repros, now fixed
 
-- **`cmd/bedrock`:**
-  - demo/clean gives 0, demo/violating gives 1 with exactly `internal/billing/billing.go:9:2`, and testdata/broken gives 2 with the `package_load_error` at `b/b.go:6:8` affecting `no-a-root-import`;
-  - a missing, empty or malformed policy gives 2, `rules=[]` and one `global` diagnostic;
-  - a policy with no evaluable rule gives 2 and no report;
-  - two runs produce byte-identical reports and shards;
-  - every emitted shard (197 per demo run) and report passes `go run ./spike/schemacheck` (schema plus semantic rules, including the stdlib provenance cross-check).
-- **`internal/policy`:** 18 fail-closed cases, and the repository policy is accepted.
-- **`internal/check`:** `except_from`, self-import of the target, direct-only imports, a third-party target, `empty_match` (including a scope that matches only stdlib), and verdict precedence (a violation plus a global diagnostic gives 1, with the other rule `INDETERMINATE`).
-- **`internal/glob`:** matching and validation.
+| Repro | Before | Now | Test |
+| --- | --- | --- | --- |
+| Direct `unsafe` import forbidden by a rule | PASS (`unsafe` unit dropped) | violation at `unsafeuse/unsafeuse.go:5:8` | `TestRegressUnsafeAndLineDirective` |
+| Forbidden import after a `//line` directive pointing outside the repo | PASS (import dropped) | violation at the physical `lined/lined.go:7:8` | same |
+| Governed package with a load error and no compiled files | could be dropped | `missing` module unit; `INDETERMINATE` with reason `unit_in_scope` | `TestRegressMissingGovernedPackage` |
+| Malformed concept symbol `"???"` | accepted | `policy_invalid`, exit 2, `rules=[]` | `TestPolicyRepros`, `TestFailClosed`, `TestSymbolIDGrammar` |
+| `rule = []` | `policy_invalid` | `policy_no_rules` | `TestPolicyRepros`, `TestFailClosed` |
+| Every rule of an unsupported kind | no report, exit 2 | report with every rule `INDETERMINATE`, exit 2 | `TestAllRulesUnsupported` |
+
+Other tests in `go test ./...`:
+
+- `TestSupervisorFaults`: a goroutine panic, a hang (2 s timeout) and allocation past a 128 MiB limit each give a global report.
+- `TestLimitValidation`.
+- `TestHostileEnvironment`: a hostile `GOFLAGS`, `GOROOT`, `GOPACKAGESDRIVER`, `GOOS`, `GOWORK`, `GOTOOLCHAIN` and `CGO_ENABLED` leave the report byte-identical.
+- `TestEnvIsControlled` and `TestInventoryMatchesDocs`.
+- `TestDeterministic`.
+- The demo, broken-fixture and policy-failure tests.
+
+Every emitted shard and report is validated by `spike/schemacheck` (schema 0.4 plus semantic rules). `go test ./spike/schemacheck` accepts every example and rejects all 25 negatives for their recorded reasons.

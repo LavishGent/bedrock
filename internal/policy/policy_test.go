@@ -57,6 +57,10 @@ func TestFailClosed(t *testing.T) {
 		{"undefined boundary", base + strings.Replace(rule, `target = "private"`, `target = "nope"`, 1), "policy_invalid", `undefined boundary "nope"`},
 		{"bad glob", strings.Replace(base, `"example.com/demo/**"`, `"example.com/demo*"`, 1) + rule, "policy_invalid", "wildcard must be a whole segment"},
 		{"unknown pack", strings.Replace(base, `"go-stdlib-sql"`, `"go-pgx"`, 1) + rule, "policy_invalid", `unknown pack "go-pgx"`},
+		{"empty rule array", strings.Replace(base, "module = \"example.com/demo\"\n", "module = \"example.com/demo\"\nrule = []\n", 1), "policy_no_rules", "no [[rule]]"},
+		{"malformed symbol ???", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"???"`, 1) + rule, "policy_invalid", `malformed symbol ID "???"`},
+		{"symbol without package", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"RequireAuth"`, 1) + rule, "policy_invalid", "malformed symbol ID"},
+		{"unused concept malformed", base + "[concept.\"spare\"]\nsymbols = [\"(example.com/x.T.M\"]\n" + rule, "policy_invalid", "malformed symbol ID"},
 		{"empty concept", base + "[concept.\"x.y\"]\n" + rule, "policy_invalid", "needs a non-empty packs or symbols"},
 		{"version", strings.Replace(base, "version = 1", "version = 2", 1) + rule, "policy_invalid", "version must be 1"},
 		{"module mismatch", strings.Replace(base, `module = "example.com/demo"`, `module = "example.com/other"`, 1) + rule, "policy_invalid", "does not match the analyzed module"},
@@ -105,5 +109,22 @@ func TestMissingAndSyntaxLocation(t *testing.T) {
 	res = Load(p, "example.com/demo")
 	if res.Diag == nil || res.Diag.Kind != "policy_invalid" || res.SHA256 == nil {
 		t.Fatalf("syntax error: %+v", res)
+	}
+}
+
+func TestSymbolIDGrammar(t *testing.T) {
+	good := []string{"example.com/demo/internal/auth.RequireAuth", "(*database/sql.DB).QueryContext",
+		"(example.com/x.T).M", "app/internal/helper.Run", "net/http.HandlerFunc"}
+	bad := []string{"???", "", "RequireAuth", "example.com/x.", "(example.com/x.T.M", "(*example.com/x.T).", "example.com/x.Run$1",
+		"(*example.com/x.T).M$bound", "example.com/x.Map[int]", " example.com/x.F", "example.com/x.F "}
+	for _, s := range good {
+		if !ValidSymbolID(s) {
+			t.Errorf("ValidSymbolID(%q) = false, want true", s)
+		}
+	}
+	for _, s := range bad {
+		if ValidSymbolID(s) {
+			t.Errorf("ValidSymbolID(%q) = true, want false", s)
+		}
 	}
 }

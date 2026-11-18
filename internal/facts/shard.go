@@ -22,6 +22,7 @@ type Unit struct {
 	Origin        string         `json:"origin"`
 	Module        *string        `json:"module"`
 	Dir           string         `json:"dir"`
+	SourceStatus  string         `json:"source_status"`
 	Files         []File         `json:"files"`
 	ExcludedFiles []ExcludedFile `json:"excluded_files"`
 	ContentHash   string         `json:"content_hash"`
@@ -77,10 +78,10 @@ type ExtSymbol struct {
 
 // Import is one direct import declaration.
 type Import struct {
-	FromUnit string   `json:"from_unit"`
-	ToUnit   string   `json:"to_unit"`
-	ToPath   string   `json:"to_path"`
-	Loc      Location `json:"loc"`
+	FromUnit string    `json:"from_unit"`
+	ToUnit   string    `json:"to_unit"`
+	ToPath   string    `json:"to_path"`
+	Loc      *Location `json:"loc"`
 }
 
 // ContentHash implements the schema README unit content hash.

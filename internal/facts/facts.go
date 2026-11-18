@@ -1,4 +1,4 @@
-// Package facts holds the Go form of the Bedrock fact and report schema 0.3
+// Package facts holds the Go form of the Bedrock fact and report schema 0.4
 // (docs/superpowers/specs/schema) plus the canonical JSON, hashing and ID rules
 // from its README. Nullable schema fields are pointers without omitempty, so
 // they encode as JSON null; slices are always non-nil so they encode as [].
@@ -12,7 +12,7 @@ import (
 )
 
 // SchemaVersion is the schema version every document carries.
-const SchemaVersion = "0.3"
+const SchemaVersion = "0.4"
 
 // Location is a source position (schema common#/$defs/location).
 type Location struct {

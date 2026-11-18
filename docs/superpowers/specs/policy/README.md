@@ -79,8 +79,15 @@ Route sets are not boundaries in version 1. Routes are scoped by projecting a pa
 | Key | Type | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
 | `packs` | array of strings | no | `[]` | Built-in packs whose bindings for this concept are included. Version 1 knows one pack, `go-stdlib-sql`, which binds only `database.query` (section 5.1). Naming an unknown pack, or a pack that has no binding for this concept, is `policy_invalid`. |
-| `symbols` | array of strings | no | `[]` | Canonical function or method symbol IDs (`../schema/README.md`, Symbol IDs), matched exactly. No globs. |
+| `symbols` | array of strings | no | `[]` | Canonical function or method symbol IDs (`../schema/README.md`, Symbol IDs), matched exactly. No globs. Every entry must match the grammar below, whether or not a rule uses the concept; anything else is `policy_invalid`. |
 
+- **Symbol ID grammar.** An entry has one of three forms:
+
+  ```
+  importpath.Func  |  (importpath.Type).Method  |  (*importpath.Type).Method
+  ```
+
+  `importpath` is one or more `/`-separated elements made of letters, digits, `_`, `.`, `~`, `+` and `-`. `Func`, `Type` and `Method` are Go identifiers. Closures (`$1`), wrappers (`$bound`, `$thunk`), generic instances (`[...]`), surrounding whitespace and other text are rejected. So are malformed strings such as `???` or a bare `RequireAuth`.
 - At least one of `packs` and `symbols` must be non-empty.
 - **Concept set**: the union of the pack bindings and `symbols`, restricted to function symbols present in the analysis universe.
 - **Wrapper closure**: a call whose target is a wrapper or instance of a bound symbol counts as a call to that symbol. This covers `$bound`, `$thunk`, pointer and promotion wrappers, and generic instances whose `origin_id` is bound. Without this, `f := db.QueryContext; f(...)`, or a struct embedding `*sql.DB`, would slip through. Call sites inside such a wrapper are not reported a second time; the call into the wrapper is the reported site.
@@ -231,7 +238,7 @@ The assumption is unsound if a standard-library function queries a database with
 | TOML syntax error, wrong type, missing required key | `policy_invalid` (global) | No rule is evaluated, exit `2`. |
 | Unknown key at any depth, including a key belonging to another rule kind | `policy_invalid` (global) | No rule is evaluated, exit `2`. |
 | `version` is not `1`, or `module` differs from the analyzed module | `policy_invalid` (global) | No rule is evaluated, exit `2`. |
-| `rule` absent or empty | `policy_no_rules` (global) | Exit `2`. |
+| `rule` absent, empty, or written as an empty array (`rule = []`) | `policy_no_rules` (global) | Exit `2`. |
 | Unknown `kind`, duplicate or malformed `id` | `policy_invalid` (global) | No rule is evaluated, exit `2`. |
 | Reference to an undefined boundary or concept, unknown pack, malformed glob, route pattern or symbol ID, or a middleware concept bound to a function with the wrong signature | `policy_invalid` (global) | No rule is evaluated, exit `2`. |
 | A boundary referenced by a rule matches nothing in its role (`scope`: no module unit; `target`, `except_from`, `boundary`: no unit) | `empty_match` (global; `affects_rules` lists each referencing rule, reason `policy_config`) | Those rules are `INDETERMINATE`. Other rules are evaluated, and the verdict table applies: a violation elsewhere still gives `1`. |
@@ -240,6 +247,8 @@ The assumption is unsound if a standard-library function queries a database with
 | A boundary or concept defined but referenced by no rule | none | Allowed. It is not checked for empty match. |
 
 In every case all diagnostics are listed in the report (plan decision 7).
+
+**Rules a build cannot evaluate.** A valid rule whose kind the running build does not implement (in step 2, `require_middleware` and `restrict_concept_to_boundary`) is still listed in the report. It is `INDETERMINATE`, through a `rule_not_evaluated` diagnostic (schema 0.4). Bedrock fails closed here: an unchecked rule can never pass, and a release or CI gate is not a substitute.
 
 **Report form of a policy failure.** For `policy_missing`, `policy_invalid` and `policy_no_rules`, the diagnostic has relevance **`global`**, run-level, with empty `affects_rules`. It drives the overall verdict to `2` directly. The report has `rules: []`, `violations: []` and `assumptions: []`, status `INDETERMINATE` and exit code `2`. Examples: `../schema/examples/report.policy-{missing,no-rules,invalid}.json`.
 
