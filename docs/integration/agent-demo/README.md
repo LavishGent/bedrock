@@ -29,8 +29,10 @@ All paths are resolved to absolute paths before the script changes directory. Th
 
 On success it prints the absolute paths and two ready-to-use lines:
 
-- `checker: export BEDROCK="/abs/path/bedrock"`;
-- `re-check: cd "/abs/OUT_DIR/demo" && "/abs/path/bedrock" check --policy .bedrock/policy.toml --out "/abs/OUT_DIR/report.json" .`
+- `checker: export BEDROCK='/abs/path/bedrock'`;
+- `re-check: cd '/abs/OUT_DIR/demo' && '/abs/path/bedrock' check --policy .bedrock/policy.toml --out '/abs/OUT_DIR/report.json' .`
+
+Every path is a single-quoted shell literal (a `'` inside a path is written `'\''`), valid in sh, bash and zsh. Pasting the line runs exactly that command, even if the path contains spaces, quotes, `$(...)` or backticks.
 
 ## Prompt
 
@@ -39,9 +41,9 @@ Open the agent in `OUT_DIR/demo` and paste the whole of `OUT_DIR/prompt.txt`. It
 ```text
 This Go service is checked by bedrock, an architecture-rule checker. Below is its JSON report.
 Fix every violation and every INDETERMINATE diagnostic so that this command, run in this
-directory (/abs/OUT_DIR/demo), exits 0:
+directory, '/abs/OUT_DIR/demo', exits 0:
 
-    "/abs/path/bedrock" check --policy .bedrock/policy.toml --out "/abs/OUT_DIR/report.json" .
+    '/abs/path/bedrock' check --policy .bedrock/policy.toml --out '/abs/OUT_DIR/report.json' .
 
 Rules:
 - Do not edit anything under .bedrock/ and do not weaken or delete tests.

@@ -129,3 +129,56 @@ prepare default (no args, builds bedrock)   exit 0, prints absolute export BEDRO
 - `actionlint` 1.7.12 with shellcheck, plus `ruby -ryaml`, on the workflow: clean.
 - `git diff --check`: clean.
 - Root `go build ./...` and `go vet ./...`: pass.
+
+## Recheck fixes (Codex recheck of a3ed04d/af32347)
+
+The recheck resolved B1, B2 and S1, and left three items open. As before, nothing changed outside `docs/integration`, `README.md` and this file, and no Go code changed.
+
+**S2, generated commands.** The re-check line, the export line and the command in `prompt.txt` had wrapped raw paths in double quotes, so `$(...)`, backticks and quotes ran when pasted. `prepare.sh` now writes every emitted path through `shq`: a single-quoted POSIX shell literal, with `'` written as `'\''`, valid in sh, bash and zsh. The prose mention of the working directory is quoted the same way.
+
+**S3, Cursor without `jq`.** The fallback had escaped only `\` and `"`, so a tab or newline in the report path broke the JSON. It now prints a constant JSON `followup_message`, with no variable text in it. The exit code and the exact report path go to stderr only.
+
+**N1, git baseline.** The baseline subshell sat on the left of `|| die`, so errexit was off inside it and a failed `git init` or `git add` did not stop the later steps. It is now an explicit `cd && git init && git add && git commit` chain, and the outer error is kept.
+
+### Probes (`docs/integration/tests/probes.sh`, new)
+
+The probes use a stub checker that logs its working directory and its arguments (NUL-separated) and writes the expected baseline report. A git shim logs and fails a chosen operation. Everything runs inside a temp dir.
+
+Result on the fixed scripts, **20 PASS, 0 FAIL**:
+
+- **S2, two output dirs.** The first is `demo$(touch REVIEW_SENTINEL)`. The second contains a space, `'sq'`, `"dq"`, `$HOME`, a backtick command and `$(touch REVIEW_SENTINEL)`. The checker binary's own path also contains spaces, `$(...)`, backticks and `'$x'`. For each dir:
+  - the emitted re-check line, run with `bash -c`, `sh -c` and `zsh -c`, gives the checker exactly the literal working directory and arguments;
+  - the emitted export line sets `$BEDROCK` to the literal path in all three shells;
+  - the `prompt.txt` command equals the re-check command;
+  - no `REVIEW_SENTINEL` file exists anywhere under the probe dir.
+- **S3.** The hook runs with `PATH` restricted to `bash`, `cat`, `dirname`, `git`, `sed`, `sh` and `printf` (no `jq`). The report path contains a newline, a tab, `"` and `\`. The stub returns 2. Results:
+  - stdout parses with Python's `json` and has a `FAILED` `followup_message`;
+  - the exit status is 2;
+  - the path appears on stderr.
+- **N1.** The git shim fails `init`, then `add`, then `commit`. Each time `prepare.sh` exits 2 with "creating the git baseline failed". The git operations logged are exactly `[init]`, `[init add]` and `[init add commit]`, so no step after the failing one ran. There is no "Baseline ready" output and no `prompt.txt`.
+
+**Control.** The same probe script run against the `af32347` scripts reports **17 FAIL**:
+
+- the generated commands ran `touch REVIEW_SENTINEL` and never invoked the checker with the right paths;
+- the no-`jq` output failed JSON parsing ("Invalid control character");
+- a failed `git init` or `git add` still ran `add` and `commit`.
+
+That control run created one `REVIEW_SENTINEL` in the repository root by running the old export line. It was removed, and the probe script now runs everything inside its own temp dir.
+
+### Real analyzer
+
+`BEDROCK=/tmp/s5bin/bedrock prepare.sh '/tmp/real out $(x)'`, using the binary built from this checkout:
+
+- exit 0, "Baseline ready", with exactly these violations:
+  - `auth-private-import internal/billing/billing.go:9`;
+  - `db-in-repo internal/handler/handler.go:95`;
+  - `routes-require-auth internal/server/server.go:18`.
+- `grep -rn VIOLATION` over the copy finds nothing.
+- The printed re-check line, run with `bash -c` from another directory, exits 1 with the same three violations.
+
+### Validation
+
+- `shellcheck` 0.11.0 and `bash -n` on all six scripts (including `tests/probes.sh`): clean.
+- `jq empty` on both JSON configs: valid.
+- `actionlint` 1.7.12 with shellcheck on the workflow: clean.
+- `git diff --check`: clean.
