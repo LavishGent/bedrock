@@ -18,6 +18,7 @@
   "s1-trusted-without-provenance.json": "unit_origin \"\"",
   "v04-builtin-not-unsafe.json": "value must be 'stdlib'",
   "v04-compiled-without-files.json": "minItems: got 0, want 1",
+  "v04-included-and-excluded.json": "is both included and excluded",
   "v04-missing-without-error.json": "source_status missing needs an error diagnostic",
   "v04-not-evaluated-as-warning.json": "rule_not_evaluated must be global, indeterminate, and affect exactly one rule with reason not_evaluated",
   "v04-not-evaluated-rule-missing.json": "diagnostic affects unknown rule",

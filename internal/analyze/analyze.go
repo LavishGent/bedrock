@@ -197,9 +197,20 @@ func Load(ctx context.Context, dir string) *Result {
 	l := &locator{repo: abs, goroot: filepath.Join(goroot, "src"), modulePath: res.ModulePath}
 	pv := &provenance{modulePath: res.ModulePath, repo: abs, gorootSrc: l.goroot, std: StdlibInventory()}
 	taken := addressTaken(all)
+	imported := map[string]bool{}
 	for _, p := range all {
-		if testOnly(p) {
-			continue // not a package under the profile; inventoryExcluded records it as test_only
+		for _, ip := range p.Imports {
+			imported[ip.PkgPath] = true
+		}
+	}
+	excludedDirs := map[string]string{} // dir -> reason, decided by the loader
+	for _, p := range all {
+		// A main-module directory the loader selected no files from (only
+		// tests, or every file excluded by build constraints) is an
+		// exclusion, not a load failure, unless something imports it.
+		if reason, ok := loaderExcluded(p); ok && !imported[p.PkgPath] {
+			excludedDirs[p.Dir] = reason
+			continue
 		}
 		o, perr := pv.origin(p)
 		if perr != "" {
@@ -242,7 +253,7 @@ func Load(ctx context.Context, dir string) *Result {
 		})
 		u.Shard.Imports = u.Imports
 	}
-	res.inventoryExcluded(abs, res.Units)
+	res.inventoryExcluded(abs, res.Units, excludedDirs)
 	return res
 }
 
@@ -338,28 +349,33 @@ func (pv *provenance) origin(p *packages.Package) (string, string) {
 	return "unresolved", ""
 }
 
-// testOnly reports a main-module directory matched by ./... that holds only
-// _test.go files: go list reports it with "no non-test Go files", which is an
-// exclusion (test_only), not a load failure.
-func testOnly(p *packages.Package) bool {
-	if p.Module == nil || !p.Module.Main || len(p.GoFiles) > 0 || len(p.CompiledGoFiles) > 0 || p.Dir == "" {
-		return false
+// loaderExcluded reports whether the pinned loader selected no Go files for a
+// main-module package matched by ./... and reported no error other than that
+// nothing builds ("no non-test Go files", "build constraints exclude all Go
+// files"). Any other error is a real load failure. The reason is
+// build_constraint if the loader ignored a non-test Go file, else test_only.
+func loaderExcluded(p *packages.Package) (string, bool) {
+	if p.Module == nil || !p.Module.Main || p.Dir == "" || len(p.GoFiles) > 0 || len(p.CompiledGoFiles) > 0 {
+		return "", false
 	}
-	entries, err := os.ReadDir(p.Dir)
-	if err != nil {
-		return false
-	}
-	tests := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
-			continue
+	reason := "test_only" // no selected files and no error: only tests remain
+	for _, e := range p.Errors {
+		switch {
+		case e.Kind != packages.ListError:
+			return "", false
+		case strings.Contains(e.Msg, "build constraints exclude all Go files"):
+			reason = "build_constraint"
+		case strings.Contains(e.Msg, "no non-test Go files"):
+		default:
+			return "", false
 		}
-		if !strings.HasSuffix(e.Name(), "_test.go") {
-			return false
-		}
-		tests++
 	}
-	return tests > 0
+	for _, f := range p.IgnoredFiles {
+		if strings.HasSuffix(f, ".go") && !strings.HasSuffix(f, "_test.go") {
+			reason = "build_constraint"
+		}
+	}
+	return reason, true
 }
 
 func pkgDir(p *packages.Package) string {
@@ -739,9 +755,11 @@ func collisions(syms []facts.Symbol) ([]facts.Symbol, []string) {
 }
 
 // inventoryExcluded walks the module tree and records every directory that
-// holds Go files but is not analyzed (policy contract and plan section 7:
-// the report lists excluded packages and files). Walk errors fail closed.
-func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo) {
+// holds Go files but is not analyzed, and every one of its Go files (policy
+// contract and plan section 7: the report lists excluded packages and
+// files). Analysis membership comes from the loader (units and
+// excludedDirs); the walk only inventories. Traversal errors fail closed.
+func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo, excludedDirs map[string]string) {
 	analyzed := map[string]bool{}
 	for _, u := range units {
 		if u.Origin == "module" && u.Shard.Unit.SourceStatus == "compiled" {
@@ -755,60 +773,84 @@ func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo) {
 		}
 		return r.ModulePath + "/" + filepath.ToSlash(rel)
 	}
-	hasGo := func(dir string) bool {
-		found := false
-		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".go") {
-				found = true
-				return filepath.SkipAll
+	relFile := func(p string) string {
+		rel, _ := filepath.Rel(root, p)
+		return filepath.ToSlash(rel)
+	}
+	// subtree records every Go file under dir with reason ignored_by_go (the
+	// go command never considers them for this module); the package entry
+	// carries the precise reason.
+	subtree := func(dir, reason string) error {
+		var files []string
+		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.HasSuffix(p, ".go") {
+				files = append(files, p)
 			}
 			return nil
 		})
-		return found
+		if err != nil {
+			return err
+		}
+		if len(files) > 0 {
+			r.Excluded = append(r.Excluded, facts.ExcludedPackage{ID: id(dir), Reason: reason})
+			for _, f := range files {
+				r.ExcludedFiles = append(r.ExcludedFiles, facts.ExcludedFile{Path: relFile(f), Reason: "ignored_by_go"})
+			}
+		}
+		return nil
 	}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() || path == root {
-			if path == root {
-				r.excludeDir(root, path, analyzed, id)
-			}
+		if !d.IsDir() {
 			return nil
 		}
-		name := d.Name()
-		switch {
-		case fileExists(filepath.Join(path, "go.mod")):
-			if hasGo(path) {
-				r.Excluded = append(r.Excluded, facts.ExcludedPackage{ID: id(path), Reason: "outside_module"})
+		if path != root {
+			name := d.Name()
+			switch {
+			case fileExists(filepath.Join(path, "go.mod")):
+				if err := subtree(path, "outside_module"); err != nil {
+					return err
+				}
+				return filepath.SkipDir
+			case name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_"):
+				if err := subtree(path, "ignored_by_go"); err != nil {
+					return err
+				}
+				return filepath.SkipDir
 			}
-			return filepath.SkipDir
-		case name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_"):
-			if hasGo(path) {
-				r.Excluded = append(r.Excluded, facts.ExcludedPackage{ID: id(path), Reason: "ignored_by_go"})
-			}
-			return filepath.SkipDir
 		}
-		r.excludeDir(root, path, analyzed, id)
-		return nil
+		if analyzed[path] {
+			return nil
+		}
+		return r.excludeDir(root, path, excludedDirs[path], id)
 	})
 	if err != nil {
 		r.fatal("unsupported_layout", "cannot inventory the module tree: "+err.Error())
 	}
+	// Disjointness: a unit is never also an excluded package.
+	kept := r.Excluded[:0]
+	for _, e := range r.Excluded {
+		if _, isUnit := units[e.ID]; !isUnit {
+			kept = append(kept, e)
+		}
+	}
+	r.Excluded = kept
 	sort.Slice(r.Excluded, func(i, j int) bool { return r.Excluded[i].ID < r.Excluded[j].ID })
 	sort.Slice(r.ExcludedFiles, func(i, j int) bool { return r.ExcludedFiles[i].Path < r.ExcludedFiles[j].Path })
 }
 
-// excludeDir records a directory with Go files that produced no analyzed
-// package: only tests (test_only) or nothing that builds under the profile.
-func (r *Result) excludeDir(root, dir string, analyzed map[string]bool, id func(string) string) {
-	if analyzed[dir] {
-		return
-	}
+// excludeDir records a non-analyzed directory with Go files. reason is the
+// loader's verdict when it reported the directory; otherwise it is derived
+// from the files (only tests: test_only; else build_constraint).
+func (r *Result) excludeDir(root, dir, reason string, id func(string) string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		r.fatal("unsupported_layout", "cannot read "+dir+": "+err.Error())
-		return
+		return err
 	}
 	var files []string
 	onlyTests := true
@@ -822,17 +864,20 @@ func (r *Result) excludeDir(root, dir string, analyzed map[string]bool, id func(
 		}
 	}
 	if len(files) == 0 {
-		return
+		return nil
 	}
-	reason := "build_constraint"
-	if onlyTests {
-		reason = "test_only"
+	if reason == "" {
+		reason = "build_constraint"
+		if onlyTests {
+			reason = "test_only"
+		}
 	}
 	r.Excluded = append(r.Excluded, facts.ExcludedPackage{ID: id(dir), Reason: reason})
 	for _, f := range files {
 		rel, _ := filepath.Rel(root, filepath.Join(dir, f))
 		r.ExcludedFiles = append(r.ExcludedFiles, facts.ExcludedFile{Path: filepath.ToSlash(rel), Reason: fileReason(f, true)})
 	}
+	return nil
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

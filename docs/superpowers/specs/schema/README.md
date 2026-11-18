@@ -231,6 +231,10 @@ Entry = { s in all shards' symbols : s.in_universe
     - Any diagnostic carrying `unit_origin` must agree with the inventory: `stdlib` iff the unit is in it. Shards are checked the same way: `unit.origin = stdlib` iff `unit.id` is in the inventory.
     - Negative fixtures `s1-dotless-module-trusted`, `s1-dotless-module-claims-stdlib`, `s1-trusted-without-provenance` and `s1-shard-module-unit-claims-stdlib` must be rejected.
 - **Included and excluded scope**: the report lists included and excluded packages and files (plan section 7).
+  - **Disjoint.** A package is never both included (a unit) and excluded. `schemacheck` enforces this.
+  - **Who decides.** The pinned loader decides what is analyzed. A main-module directory from which it selected no files (only tests, or every file build-excluded) is excluded, unless something imports it; an imported one becomes a `missing` unit instead.
+  - **Files.** Every Go file of an excluded directory or tree is listed in `excluded_files`. Files under nested modules, `testdata`, and `.` or `_` directories carry the file reason `ignored_by_go`; the package entry carries the precise reason (`outside_module` or `ignored_by_go`).
+  - **Traversal errors** fail closed: a global `unsupported_layout` error.
 
 ## Plan section 3 coverage
 

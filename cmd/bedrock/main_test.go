@@ -299,6 +299,7 @@ func TestRegressUnsafeAndLineDirective(t *testing.T) {
 	wantExcl := map[string]string{
 		"example.com/regress/constrained": "build_constraint", "example.com/regress/onlytests": "test_only",
 		"example.com/regress/nested": "outside_module", "example.com/regress/testdata": "ignored_by_go",
+		"example.com/regress/testplusignored": "build_constraint",
 	}
 	if fmt.Sprint(excl) != fmt.Sprint(wantExcl) {
 		t.Fatalf("packages.excluded = %v, want %v", excl, wantExcl)
@@ -307,9 +308,17 @@ func TestRegressUnsafeAndLineDirective(t *testing.T) {
 	for _, f := range r.Packages.ExcludedFiles {
 		files[f.Path] = f.Reason
 	}
-	if files["constrained/constrained.go"] != "build_constraint" || files["onlytests/only_test.go"] != "test_file" {
-		t.Fatalf("packages.excluded_files = %v", files)
+	wantFiles := map[string]string{
+		"constrained/constrained.go": "build_constraint", "onlytests/only_test.go": "test_file",
+		"nested/nested.go": "ignored_by_go", "testdata/data.go": "ignored_by_go",
+		"testplusignored/plugin.go": "build_constraint", "testplusignored/dynamic_test.go": "test_file",
 	}
+	for f, why := range wantFiles {
+		if files[f] != why {
+			t.Fatalf("excluded_files[%s] = %q, want %q (all: %v)", f, files[f], why, files)
+		}
+	}
+	assertDisjoint(t, raw)
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }
 
@@ -473,4 +482,110 @@ func TestFaultDuringPolicyAcquisition(t *testing.T) {
 		t.Fatalf("abort report must mark the policy metadata unavailable:\n%s", raw)
 	}
 	schemacheck(t, writeReport(t, t.TempDir(), raw))
+}
+
+// assertDisjoint checks that no package is both included and excluded.
+func assertDisjoint(t *testing.T, raw []byte) {
+	t.Helper()
+	var r struct {
+		Packages struct {
+			Included []string `json:"included"`
+			Excluded []struct {
+				ID string `json:"id"`
+			} `json:"excluded"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		t.Fatal(err)
+	}
+	inc := map[string]bool{}
+	for _, id := range r.Packages.Included {
+		inc[id] = true
+	}
+	for _, e := range r.Packages.Excluded {
+		if inc[e.ID] {
+			t.Fatalf("%s is both included and excluded", e.ID)
+		}
+	}
+}
+
+// S4b: an unreadable directory inside an excluded tree fails closed.
+func TestExcludedSubtreeUnreadable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read anything")
+	}
+	dir := filepath.Join(t.TempDir(), "regress")
+	if err := exec.Command("cp", "-R", "../../testdata/regress", dir).Run(); err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(dir, "testdata", "locked")
+	if err := os.MkdirAll(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "x.go"), []byte("package locked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	code, raw, _ := run(t, dir)
+	r := decode(t, raw)
+	found := false
+	for _, d := range r.Diagnostics {
+		if d.Kind == "unsupported_layout" && d.Relevance == "global" && strings.Contains(string(raw), "cannot inventory the module tree") {
+			found = true
+		}
+	}
+	if code != 2 || r.Status != "INDETERMINATE" || !found {
+		t.Fatalf("exit %d status %s; want 2 with a global unsupported_layout for the unreadable subtree:\n%s", code, r.Status, raw)
+	}
+	schemacheck(t, writeReport(t, t.TempDir(), raw))
+}
+
+// S4a repro on the real module Codex used: xxhash v2.3.0's dynamic/ (a test
+// file plus a build-ignored file) is excluded, not a load error.
+func TestXXHashRepro(t *testing.T) {
+	out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Skip(err)
+	}
+	src := filepath.Join(strings.TrimSpace(string(out)), "github.com", "cespare", "xxhash", "v2@v2.3.0")
+	if _, err := os.Stat(src); err != nil {
+		t.Skip("xxhash v2.3.0 not in the module cache")
+	}
+	dir := filepath.Join(t.TempDir(), "xxhash")
+	if err := exec.Command("cp", "-R", src, dir).Run(); err != nil {
+		t.Fatal(err)
+	}
+	_ = exec.Command("chmod", "-R", "u+w", dir).Run()
+	pol := filepath.Join(t.TempDir(), "policy.toml")
+	if err := os.WriteFile(pol, []byte(`version = 1
+module = "github.com/cespare/xxhash/v2"
+[boundary.all]
+packages = ["github.com/cespare/xxhash/v2/**"]
+[boundary.unsafe]
+packages = ["unsafe"]
+[[rule]]
+id = "no-unsafe"
+kind = "forbid_import"
+scope = "all"
+target = "unsafe"
+message = "No unsafe."
+remediation.message = "Remove unsafe."
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, raw, facts := run(t, "--policy", pol, dir)
+	r := decode(t, raw)
+	if code != 1 || len(r.Violations) != 1 || r.Violations[0].Location.File != "xxhash_unsafe.go" {
+		t.Fatalf("exit %d violations %+v; want 1 with only the xxhash_unsafe.go violation", code, r.Violations)
+	}
+	for _, d := range r.Diagnostics {
+		if d.Kind == "package_load_error" || d.Relevance != "warning" {
+			t.Fatalf("unexpected diagnostic %+v", d)
+		}
+	}
+	assertDisjoint(t, raw)
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }

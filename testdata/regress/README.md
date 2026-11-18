@@ -21,3 +21,6 @@ Excluded coverage (S4). These directories hold Go files but are not analyzed, an
 | `onlytests` | `test_only` |
 | `nested` | `outside_module` |
 | `testdata` | `ignored_by_go` |
+| `testplusignored` | `build_constraint`: one `_test.go` file plus one `//go:build ignore` file, the shape of xxhash's `dynamic/`. It is never a missing unit or a `package_load_error`. |
+
+Every Go file in an excluded tree is listed in `packages.excluded_files`. That includes `nested/nested.go` and `testdata/data.go`, with reason `ignored_by_go`. The package entry carries the precise reason. An unreadable directory inside an excluded tree is a fatal `unsupported_layout` (exit 2). `TestExcludedSubtreeUnreadable` covers this.

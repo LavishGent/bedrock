@@ -66,6 +66,8 @@ x=copy.deepcopy(mi); x['unit']['origin']='unresolved'; x['unit']['source_status'
 add('v04-unresolved-builtin', x, "value must be 'stdlib'")
 sp=load('shard.spike-cmd-server.json'); sp['unit']['source_status']='builtin'; sp['unit']['files']=[]
 add('v04-builtin-not-unsafe', sp, "value must be 'stdlib'")
+r=copy.deepcopy(ill); r['packages']['excluded']=[{'id': r['packages']['included'][0], 'reason': 'build_constraint'}]
+add('v04-included-and-excluded', r, 'is both included and excluded')
 for k,v in cases.items():
     json.dump(v,open(E+'invalid/'+k+'.json','w'),indent=2); open(E+'invalid/'+k+'.json','a').write('\n')
 json.dump(expect,open(E+'invalid/expect.json','w'),indent=2,sort_keys=True); open(E+'invalid/expect.json','a').write('\n')

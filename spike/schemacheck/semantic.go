@@ -571,6 +571,15 @@ func checkReport(d obj) []string {
 	if !sort.StringsAreSorted(inc) {
 		c.errf("packages.included not sorted")
 	}
+	included := map[string]bool{}
+	for _, id := range inc {
+		included[id] = true
+	}
+	for _, e := range arr(d["packages"].(obj)["excluded"]) {
+		if included[str(e.(obj)["id"])] {
+			c.errf("package %s is both included and excluded", e.(obj)["id"])
+		}
+	}
 	return c.errs
 }
 
