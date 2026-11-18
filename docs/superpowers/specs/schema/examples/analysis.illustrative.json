@@ -1,0 +1,102 @@
+{
+  "schema_version": "0.1",
+  "kind": "analysis_manifest",
+  "analyzer": {
+    "name": "bedrock-analyzer-go",
+    "version": "0.0.0-poc"
+  },
+  "status": "complete",
+  "build_profile": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo_enabled": false,
+    "tags": [],
+    "go_version": "go1.26.11",
+    "x_tools_version": "v0.52.0"
+  },
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "module": {
+    "path": "example.com/app",
+    "dir": "."
+  },
+  "patterns": [
+    "./..."
+  ],
+  "limits": {
+    "timeout_seconds": 120,
+    "memory_mib": 4096
+  },
+  "universe": {
+    "definition": "all_functions_transitive_closure_v1",
+    "bodyless_policy": "leaf_with_diagnostic_v1",
+    "function_count": 17012,
+    "bodyless_count": 549
+  },
+  "units": [
+    {
+      "id": "example.com/app/internal/api",
+      "origin": "module",
+      "content_hash": "sha256:037529fbd210132675347062d059c749ef9cd6f667866453f7f808bdf166db94",
+      "shard": "sha256:62e0dbacb032f583c9d81669610663d45f6ec9a88e74c174bef8d7912d12f66f"
+    },
+    {
+      "id": "example.com/app/internal/auth",
+      "origin": "module",
+      "content_hash": "sha256:7eaf8673d37bf3551adfffef93ec2f50acb6eea2bce60a5a09fc4e935d1d01f0",
+      "shard": "sha256:91f599ef583d44185cd5de8282c3f92108d4e4c6d81e5c0abfa8e585a9228b64"
+    },
+    {
+      "id": "example.com/app/internal/auth/private",
+      "origin": "module",
+      "content_hash": "sha256:6faa739551d7e33955eaa84ace43ae22f047047114b4aaa82c8e35a7d8db6a61",
+      "shard": "sha256:2b14e3b7d448859a50c45372dfe3f9810ad41d396db6a7e34fe4a9c890b09f59"
+    },
+    {
+      "id": "example.com/app/internal/billing",
+      "origin": "module",
+      "content_hash": "sha256:44c442977a73766a18f44f3fd0659cda4d93344fd3a2a23a2518e8af864ff527",
+      "shard": "sha256:e0c0331c283953a25bbb69a3d596796ef928cecfd52b5262e4c31deaed62b211"
+    },
+    {
+      "id": "github.com/go-chi/chi/v5",
+      "origin": "dependency",
+      "content_hash": "sha256:80f8fae65e0144a89673fcbdfc6fd9cb37904866400542d13423a0ddc5396fed",
+      "shard": "sha256:8726471ac8b9c36a242d817c786fcc53bb3dd1d760668d8b0f4a2799c8dbcf56"
+    },
+    {
+      "id": "net/http",
+      "origin": "stdlib",
+      "content_hash": "sha256:ed6ef2ed19f26f7832212be38809ff2b18d651f01aa2de6b337d3e8beeaebff6",
+      "shard": "sha256:736c7f8053409e9ff87b97480ed6f3df557ad6ea1305816d0ead8c7841212995"
+    }
+  ],
+  "excluded_packages": [
+    {
+      "id": "example.com/app/tools",
+      "reason": "build_constraint"
+    }
+  ],
+  "entry": {
+    "count": 6,
+    "digest": "sha256:76ceb3a782d0df1c38c02dd814501d4f9638de0b11715795c3be7692444fe8e2"
+  },
+  "global_diagnostics": [
+    {
+      "kind": "unsupported_layout",
+      "severity": "warning",
+      "scope": "global",
+      "unit_id": null,
+      "symbol_id": null,
+      "site_id": null,
+      "message": "go.work found at repository root and ignored (GOWORK=off); only module example.com/app is analyzed.",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "go.work",
+        "line": 1,
+        "column": 1
+      },
+      "id": "diag:afd96e7935a555f3"
+    }
+  ]
+}

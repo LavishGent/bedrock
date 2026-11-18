@@ -1,0 +1,693 @@
+{
+  "schema_version": "0.1",
+  "kind": "unit_shard",
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "unit": {
+    "id": "example.com/app/internal/api",
+    "lang": "go",
+    "origin": "module",
+    "module": "example.com/app",
+    "dir": "internal/api",
+    "files": [
+      {
+        "path": "internal/api/api.go",
+        "sha256": "sha256:6692818b767e38ac53be14fdb01813953a5dc8835813a2ab0a8a7f6deda089bb"
+      },
+      {
+        "path": "internal/api/map.go",
+        "sha256": "sha256:9d74009bfc98521e0a1d6dccdf2d40d1cc2667d623b0bd0ede2dfbb01fd88879"
+      }
+    ],
+    "excluded_files": [
+      {
+        "path": "internal/api/api_windows.go",
+        "reason": "build_constraint"
+      },
+      {
+        "path": "internal/api/api_test.go",
+        "reason": "test_file"
+      }
+    ],
+    "content_hash": "sha256:037529fbd210132675347062d059c749ef9cd6f667866453f7f808bdf166db94",
+    "dep_hashes": [
+      {
+        "unit_id": "example.com/app/internal/auth",
+        "content_hash": "sha256:7eaf8673d37bf3551adfffef93ec2f50acb6eea2bce60a5a09fc4e935d1d01f0"
+      },
+      {
+        "unit_id": "github.com/go-chi/chi/v5",
+        "content_hash": "sha256:80f8fae65e0144a89673fcbdfc6fd9cb37904866400542d13423a0ddc5396fed"
+      },
+      {
+        "unit_id": "net/http",
+        "content_hash": "sha256:ed6ef2ed19f26f7832212be38809ff2b18d651f01aa2de6b337d3e8beeaebff6"
+      }
+    ]
+  },
+  "symbols": [
+    {
+      "id": "(*example.com/app/internal/api.Handler).Create",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "method",
+      "name": "Create",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 27,
+        "column": 19
+      }
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).Create$bound",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "wrapper",
+      "name": "Create$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/app/internal/api.Handler).Create",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).List",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "method",
+      "name": "List",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 24,
+        "column": 19
+      }
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).List$bound",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "wrapper",
+      "name": "List$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/app/internal/api.Handler).List",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).Ping",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "wrapper",
+      "name": "Ping",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(example.com/app/internal/api.Handler).Ping",
+      "wrapper_kind": "pointer",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).Run",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "method",
+      "name": "Run",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 34,
+        "column": 19
+      }
+    },
+    {
+      "id": "(example.com/app/internal/api.Handler).Ping",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "method",
+      "name": "Ping",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 30,
+        "column": 18
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Handler",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "type",
+      "name": "Handler",
+      "exported": true,
+      "has_body": false,
+      "in_universe": false,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 8,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Map",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "func",
+      "name": "Map",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/map.go",
+        "line": 4,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Map[int, string]",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "instance",
+      "name": "Map[int, string]",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "example.com/app/internal/api.Map",
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/map.go",
+        "line": 4,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "func",
+      "name": "Register",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 12,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register$1",
+      "unit_id": "example.com/app/internal/api",
+      "kind": "closure",
+      "name": "Register$1",
+      "exported": false,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": "example.com/app/internal/api.Register",
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 16,
+        "column": 22
+      }
+    }
+  ],
+  "external_symbols": [
+    {
+      "id": "(*github.com/go-chi/chi/v5.Mux).Get",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "(*github.com/go-chi/chi/v5.Mux).Post",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "(*github.com/go-chi/chi/v5.Mux).With",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "(*net/http.http2responseWriter).WriteHeader",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.response).WriteHeader",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "example.com/app/internal/auth.RequireAuth",
+      "unit_id": "example.com/app/internal/auth"
+    }
+  ],
+  "imports": [
+    {
+      "from_unit": "example.com/app/internal/api",
+      "to_unit": "example.com/app/internal/auth",
+      "to_path": "example.com/app/internal/auth",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 5,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/app/internal/api",
+      "to_unit": "github.com/go-chi/chi/v5",
+      "to_path": "github.com/go-chi/chi/v5",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 4,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/app/internal/api",
+      "to_unit": "net/http",
+      "to_path": "net/http",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 3,
+        "column": 2
+      }
+    }
+  ],
+  "call_sites": [
+    {
+      "id": "(*example.com/app/internal/api.Handler).Create$bound#0",
+      "caller": "(*example.com/app/internal/api.Handler).Create$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/app/internal/api.Handler).Create",
+      "targets": [
+        "(*example.com/app/internal/api.Handler).Create"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).List$bound#0",
+      "caller": "(*example.com/app/internal/api.Handler).List$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/app/internal/api.Handler).List",
+      "targets": [
+        "(*example.com/app/internal/api.Handler).List"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).Ping#0",
+      "caller": "(*example.com/app/internal/api.Handler).Ping",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(example.com/app/internal/api.Handler).Ping",
+      "targets": [
+        "(example.com/app/internal/api.Handler).Ping"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/app/internal/api.Handler).Run#0",
+      "caller": "(*example.com/app/internal/api.Handler).Run",
+      "ordinal": 0,
+      "mode": "dynamic",
+      "callee_hint": null,
+      "targets": [],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 35,
+        "column": 4
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#0",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 0,
+      "mode": "invoke",
+      "callee_hint": "(github.com/go-chi/chi/v5.Router).Get",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).Get"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 13,
+        "column": 7
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#1",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 1,
+      "mode": "invoke",
+      "callee_hint": "(github.com/go-chi/chi/v5.Router).Get",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).Get"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 14,
+        "column": 7
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#2",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 2,
+      "mode": "invoke",
+      "callee_hint": "(github.com/go-chi/chi/v5.Router).With",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).With"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 15,
+        "column": 8
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#3",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 3,
+      "mode": "invoke",
+      "callee_hint": "(github.com/go-chi/chi/v5.Router).Post",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).Post"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 15,
+        "column": 30
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#4",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 4,
+      "mode": "invoke",
+      "callee_hint": "(github.com/go-chi/chi/v5.Router).Get",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).Get"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 16,
+        "column": 7
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register#5",
+      "caller": "example.com/app/internal/api.Register",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "example.com/app/internal/api.Map[int, string]",
+      "targets": [
+        "example.com/app/internal/api.Map[int, string]"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 20,
+        "column": 5
+      }
+    },
+    {
+      "id": "example.com/app/internal/api.Register$1#0",
+      "caller": "example.com/app/internal/api.Register$1",
+      "ordinal": 0,
+      "mode": "invoke",
+      "callee_hint": "(net/http.ResponseWriter).WriteHeader",
+      "targets": [
+        "(*net/http.http2responseWriter).WriteHeader",
+        "(*net/http.response).WriteHeader"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 17,
+        "column": 14
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "route:example.com/app/internal/api:GET:/healthz#0",
+      "unit_id": "example.com/app/internal/api",
+      "router": "chi",
+      "method": "GET",
+      "path": "/healthz",
+      "pattern_raw": "/healthz",
+      "duplicate_index": 0,
+      "handler_sym": "example.com/app/internal/api.Register$1",
+      "handler_value_sym": null,
+      "registered_in": "example.com/app/internal/api.Register",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 16,
+        "column": 7
+      }
+    },
+    {
+      "id": "route:example.com/app/internal/api:GET:/items#0",
+      "unit_id": "example.com/app/internal/api",
+      "router": "chi",
+      "method": "GET",
+      "path": "/items",
+      "pattern_raw": "/items",
+      "duplicate_index": 0,
+      "handler_sym": "(*example.com/app/internal/api.Handler).List",
+      "handler_value_sym": "(*example.com/app/internal/api.Handler).List$bound",
+      "registered_in": "example.com/app/internal/api.Register",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 13,
+        "column": 7
+      }
+    },
+    {
+      "id": "route:example.com/app/internal/api:GET:/items#1",
+      "unit_id": "example.com/app/internal/api",
+      "router": "chi",
+      "method": "GET",
+      "path": "/items",
+      "pattern_raw": "/items",
+      "duplicate_index": 1,
+      "handler_sym": "(*example.com/app/internal/api.Handler).List",
+      "handler_value_sym": "(*example.com/app/internal/api.Handler).List$bound",
+      "registered_in": "example.com/app/internal/api.Register",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 14,
+        "column": 7
+      }
+    },
+    {
+      "id": "route:example.com/app/internal/api:POST:/items#0",
+      "unit_id": "example.com/app/internal/api",
+      "router": "chi",
+      "method": "POST",
+      "path": "/items",
+      "pattern_raw": "/items",
+      "duplicate_index": 0,
+      "handler_sym": "(*example.com/app/internal/api.Handler).Create",
+      "handler_value_sym": "(*example.com/app/internal/api.Handler).Create$bound",
+      "registered_in": "example.com/app/internal/api.Register",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 15,
+        "column": 30
+      }
+    }
+  ],
+  "route_middleware": [
+    {
+      "route_id": "route:example.com/app/internal/api:POST:/items#0",
+      "middleware_sym": "example.com/app/internal/auth.RequireAuth",
+      "order": 0,
+      "source": "with",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 15,
+        "column": 8
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "kind": "unresolved_dynamic_call",
+      "severity": "warning",
+      "scope": "unit",
+      "unit_id": "example.com/app/internal/api",
+      "symbol_id": "(*example.com/app/internal/api.Handler).Run",
+      "site_id": "(*example.com/app/internal/api.Handler).Run#0",
+      "message": "Call through func value `fn` has no VTA targets.",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 35,
+        "column": 4
+      },
+      "id": "diag:7021aec178f1d1ef"
+    },
+    {
+      "kind": "duplicate_route",
+      "severity": "warning",
+      "scope": "unit",
+      "unit_id": "example.com/app/internal/api",
+      "symbol_id": "example.com/app/internal/api.Register",
+      "site_id": "example.com/app/internal/api.Register#1",
+      "message": "GET /items is registered twice in this unit; both registrations are kept as separate routes.",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/api/api.go",
+        "line": 14,
+        "column": 7
+      },
+      "id": "diag:c9385cca0e69361c"
+    }
+  ]
+}

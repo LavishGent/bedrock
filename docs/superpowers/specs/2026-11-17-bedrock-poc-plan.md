@@ -93,6 +93,20 @@ Conditions that make the run indeterminate (verdict `2` unless a violation exist
 - Unsupported module or workspace layout: the POC accepts one explicit module and one pinned build profile (GOOS, GOARCH, build tags, cgo setting). The report lists included and excluded packages and files.
 - Analyzer crash, timeout or memory limit.
 
+### Pinned toolchain and build profile (step 0)
+
+| Item | Pin |
+| --- | --- |
+| Go | `go1.26.11` (root `go.mod`: `go 1.26.0`, `toolchain go1.26.11`; analysis runs with `GOTOOLCHAIN=local`) |
+| `golang.org/x/tools` | `v0.52.0` (root `go.mod`). `v0.53.0` was released the day of step 0 and is not used. |
+| `GOOS` / `GOARCH` | `linux` / `amd64`, applied when loading the target on any host |
+| cgo | `CGO_ENABLED=0` |
+| Build tags | none |
+| Module mode | `GOFLAGS=-mod=readonly`, `GOWORK=off`, one explicit module |
+| Analyzer limits | 120 s wall clock, 4096 MiB Go runtime memory; crossing either is a global `analyzer_timeout` / `analyzer_memory_limit` diagnostic |
+
+The profile is recorded in every manifest and report as `build_profile` and bound to shards through `build_profile_digest` (`schema/README.md`).
+
 Relevance for `restrict_concept_to_boundary` is conservative and independent of resolved sink reachability:
 
 - Any unknown call (unresolved function value, reflection, `unsafe`, bodyless function, unresolved interface call) that is reachable from a governed `Entry` or sits in a governed unit gives `2`, unless proven irrelevant.
@@ -109,6 +123,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 ## 8. Build order
 
 0. **Schema and spikes.** Pin the JSON shard and report schema with examples (section 3). Pin Go and `x/tools` versions and the build profile. Create a minimal compilable spike module under `spike/` (a repo package, a handler, a `database/sql` call, one `chi` route). The full demo states stay in step 1. Run a bounded SSA, CHA and VTA spike on it with explicit timeout and memory expectations, and record the results and the standard-library diagnostics.
+   *Delivered:* schema 0.1 and examples in `schema/` (validated by `spike/schemacheck`), pins in section 7, spike module `spike/target`, bounded spike `spike/ssaspike`, results and open issues in `step0/2026-11-17-ssa-spike.md`.
 1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in all states).
 2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
 3. Route and middleware extraction per the support matrix. `require_middleware`.
@@ -153,5 +168,6 @@ Automated acceptance matrix:
 
 ## 12. Open questions
 
-- VTA run time and memory on the demo with the full analysis universe (step 0 measures it).
+- VTA run time and memory on the demo with the full analysis universe. Step 0 measured the spike: about 1 s and about 0.75 GiB for 16,966 functions, 99% of them standard library (`step0/2026-11-17-ssa-spike.md`). The demo is re-measured in step 4.
+- How a reachable unknown call is "proven irrelevant" (section 7). On the clean spike, the route handler reaches 1,844 standard-library unknown-call sites, so without a stated criterion the clean demo is `INDETERMINATE` for `restrict_concept_to_boundary`. Needs an owner decision before step 4 (step 0 note, open issue 1).
 - Real-world accuracy is untested until a real Go service is added as a target.

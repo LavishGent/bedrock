@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bedrock.invalid/poc/0.1/shard.schema.json",
+  "title": "Bedrock POC unit shard",
+  "description": "Facts for exactly one unit (Go package). The shard owns every record whose owner unit is this unit; anything else it mentions is listed in external_symbols. Ordering, ID and integrity rules: README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "build_profile_digest",
+    "unit",
+    "symbols",
+    "external_symbols",
+    "imports",
+    "call_sites",
+    "routes",
+    "route_middleware",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": { "const": "unit_shard" },
+    "build_profile_digest": {
+      "description": "sha256 of the manifest's build_profile object in canonical JSON. A shard is only mergeable with a manifest whose profile digest matches.",
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "unit": { "$ref": "#/$defs/unit" },
+    "symbols": {
+      "description": "Symbols owned by this unit. Sorted by id, unique.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/symbol" }
+    },
+    "external_symbols": {
+      "description": "Symbols referenced by this shard but owned by another unit. Sorted by id, unique, disjoint from symbols.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/externalSymbol" }
+    },
+    "imports": {
+      "description": "Direct imports of this unit. Sorted by (to_unit, loc.file, loc.line, loc.column).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/import" }
+    },
+    "call_sites": {
+      "description": "Every non-builtin call instruction in a symbol owned by this unit. Sorted by (caller, ordinal).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/callSite" }
+    },
+    "routes": {
+      "description": "Routes registered by code in this unit. Sorted by id.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/route" }
+    },
+    "route_middleware": {
+      "description": "Sorted by (route_id, order).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/routeMiddleware" }
+    },
+    "diagnostics": {
+      "description": "scope=unit diagnostics owned by this unit. Sorted by id.",
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "common.schema.json#/$defs/diagnostic" },
+          { "properties": { "scope": { "const": "unit" } } }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "lang",
+        "origin",
+        "module",
+        "dir",
+        "files",
+        "excluded_files",
+        "content_hash",
+        "dep_hashes"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/unitId" },
+        "lang": { "const": "go" },
+        "origin": {
+          "description": "module: the one analyzed module. dependency: another module from go.mod. stdlib: GOROOT.",
+          "enum": ["module", "dependency", "stdlib"]
+        },
+        "module": {
+          "description": "path@version of the owning module; null for stdlib; version is omitted ('path') for the main module.",
+          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[^\\s]+$" }]
+        },
+        "dir": {
+          "description": "Package directory, relative to the same root its file locations use.",
+          "type": "string"
+        },
+        "files": {
+          "description": "Go files compiled into the unit under the pinned build profile. Sorted by path, unique.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": { "$ref": "common.schema.json#/$defs/relPath" },
+              "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+            }
+          }
+        },
+        "excluded_files": {
+          "description": "Go files in the package directory that are not compiled under the profile. Sorted by path.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reason"],
+            "properties": {
+              "path": { "$ref": "common.schema.json#/$defs/relPath" },
+              "reason": { "enum": ["build_constraint", "test_file", "cgo_disabled", "ignored_by_go"] }
+            }
+          }
+        },
+        "content_hash": {
+          "description": "sha256 over the UTF-8 bytes of, for each file in files order: path, NUL, lowercase hex file hash, LF.",
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "dep_hashes": {
+          "description": "content_hash of each direct import. Sorted by unit_id, unique; same set as imports[].to_unit.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["unit_id", "content_hash"],
+            "properties": {
+              "unit_id": { "$ref": "common.schema.json#/$defs/unitId" },
+              "content_hash": { "$ref": "common.schema.json#/$defs/sha256" }
+            }
+          }
+        }
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "unit_id",
+        "kind",
+        "name",
+        "exported",
+        "has_body",
+        "in_universe",
+        "parent_id",
+        "origin_id",
+        "wrapper_kind",
+        "entry_hints",
+        "loc"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/symbolId" },
+        "unit_id": {
+          "description": "Owner unit. Must equal the shard's unit.id.",
+          "$ref": "common.schema.json#/$defs/unitId"
+        },
+        "kind": {
+          "enum": ["func", "method", "closure", "instance", "wrapper", "type", "var"]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "exported": { "type": "boolean" },
+        "has_body": {
+          "description": "false for bodyless functions (assembly, linkname, compiler intrinsics) and for type/var symbols.",
+          "type": "boolean"
+        },
+        "in_universe": {
+          "description": "true iff the function is in the analysis universe (README: Analysis universe). Always false for type/var.",
+          "type": "boolean"
+        },
+        "parent_id": {
+          "description": "Enclosing function for closures; null otherwise.",
+          "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/symbolId" }]
+        },
+        "origin_id": {
+          "description": "Generic declaration for instances; wrapped method for wrappers; null otherwise.",
+          "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/symbolId" }]
+        },
+        "wrapper_kind": {
+          "anyOf": [
+            { "type": "null" },
+            { "enum": ["bound", "thunk", "pointer", "promotion", "instance_wrapper"] }
+          ]
+        },
+        "entry_hints": {
+          "description": "Facts that explain, but do not decide, Entry membership. Entry itself is derived (README: Recovering Entry).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_main", "is_init", "address_taken"],
+          "properties": {
+            "is_main": { "type": "boolean" },
+            "is_init": { "type": "boolean" },
+            "address_taken": {
+              "description": "The function is used as a value (method value, func value, interface conversion), so callers may be dynamic.",
+              "type": "boolean"
+            }
+          }
+        },
+        "loc": { "$ref": "common.schema.json#/$defs/nullableLocation" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "closure" } } },
+          "then": { "properties": { "parent_id": { "type": "string" } } },
+          "else": { "properties": { "parent_id": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "wrapper" } } },
+          "then": { "properties": { "wrapper_kind": { "type": "string" }, "origin_id": { "type": "string" } } },
+          "else": { "properties": { "wrapper_kind": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "instance" } } },
+          "then": { "properties": { "origin_id": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["type", "var"] } } },
+          "then": { "properties": { "has_body": { "const": false }, "in_universe": { "const": false } } }
+        }
+      ]
+    },
+    "externalSymbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "unit_id"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/symbolId" },
+        "unit_id": {
+          "description": "Owner unit; must differ from this shard's unit and must define id at merge time.",
+          "$ref": "common.schema.json#/$defs/unitId"
+        }
+      }
+    },
+    "import": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_unit", "to_unit", "to_path", "loc"],
+      "properties": {
+        "from_unit": { "$ref": "common.schema.json#/$defs/unitId" },
+        "to_unit": { "$ref": "common.schema.json#/$defs/unitId" },
+        "to_path": { "description": "Import path as written in source.", "type": "string" },
+        "loc": { "$ref": "common.schema.json#/$defs/location" }
+      }
+    },
+    "callSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "caller", "ordinal", "mode", "callee_hint", "targets", "resolution", "loc"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/siteId" },
+        "caller": { "$ref": "common.schema.json#/$defs/symbolId" },
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "mode": {
+          "description": "static: direct call. invoke: interface method call. dynamic: call through a function value.",
+          "enum": ["static", "invoke", "dynamic"]
+        },
+        "callee_hint": {
+          "description": "Static callee ID (static) or interface method 'I.M' (invoke); null for dynamic.",
+          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^\\S(.*\\S)?$" }]
+        },
+        "targets": {
+          "description": "Resolved callees, sorted, unique. Each (caller, target) pair is one call edge. Empty for an unresolved non-static site, which also carries a diagnostic.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/symbolId" }
+        },
+        "resolution": {
+          "description": "Which analysis produced targets: static (SSA static callee), vta (VTA seeded by CHA).",
+          "enum": ["static", "vta"]
+        },
+        "loc": { "$ref": "common.schema.json#/$defs/nullableLocation" }
+      },
+      "if": { "properties": { "mode": { "const": "static" } } },
+      "then": {
+        "properties": {
+          "resolution": { "const": "static" },
+          "callee_hint": { "type": "string" },
+          "targets": { "minItems": 1, "maxItems": 1 }
+        }
+      },
+      "else": { "properties": { "resolution": { "const": "vta" } } }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "unit_id",
+        "router",
+        "method",
+        "path",
+        "pattern_raw",
+        "duplicate_index",
+        "handler_sym",
+        "handler_value_sym",
+        "registered_in",
+        "loc"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/routeId" },
+        "unit_id": { "$ref": "common.schema.json#/$defs/unitId" },
+        "router": { "enum": ["chi", "net_http"] },
+        "method": {
+          "description": "Upper-case HTTP method, or null when the route matches any method.",
+          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[A-Z]+$" }]
+        },
+        "path": {
+          "description": "Normalized full path (prefixes from Route/Group applied), or null when unresolved (paired with an unresolved_dynamic_route diagnostic; the route ID then uses an empty path).",
+          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^/\\S*$" }]
+        },
+        "pattern_raw": { "anyOf": [{ "type": "null" }, { "type": "string" }] },
+        "duplicate_index": {
+          "description": "0 for the first registration of (unit, method, path) in (file, line, column) order, 1 for the next, ...",
+          "type": "integer",
+          "minimum": 0
+        },
+        "handler_sym": {
+          "description": "User-level handler function (bound-method wrappers unwrapped to the method). Route handlers are Entry symbols. null when unresolved.",
+          "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/symbolId" }]
+        },
+        "handler_value_sym": {
+          "description": "The function value actually registered, when it differs from handler_sym (for example a $bound wrapper).",
+          "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/symbolId" }]
+        },
+        "registered_in": {
+          "description": "Function containing the registration call.",
+          "$ref": "common.schema.json#/$defs/symbolId"
+        },
+        "loc": { "$ref": "common.schema.json#/$defs/location" }
+      }
+    },
+    "routeMiddleware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_id", "middleware_sym", "order", "source", "loc"],
+      "properties": {
+        "route_id": { "$ref": "common.schema.json#/$defs/routeId" },
+        "middleware_sym": { "$ref": "common.schema.json#/$defs/symbolId" },
+        "order": {
+          "description": "0 = outermost (runs first).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": { "enum": ["use", "with", "group", "route", "direct_wrapper"] },
+        "loc": { "$ref": "common.schema.json#/$defs/location" }
+      }
+    }
+  }
+}
