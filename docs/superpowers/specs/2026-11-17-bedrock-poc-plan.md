@@ -137,6 +137,12 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
    *Delivered:* `internal/analyze/callgraph.go` (SSA with instantiated generics, CHA seeding VTA, call sites, universe symbols, unknown-call diagnostics, analysis manifest), `internal/check/boundary.go` (shard merge checks, Entry recomputed once from the merged graph, `reachable_from`, decision A relevance with assumption counts). `restrict_concept_to_boundary` is evaluated, so it no longer gets `rule_not_evaluated`, and `demo/clean` exits 0. Fixtures are in `testdata/step4`. The schema is unchanged at 0.4; symbol ID clarifications are in `schema/README.md`. Evidence in `step4/2026-11-18-step4-evidence.md`.
 5. Hook and CI examples, plus the by-hand agent demo.
+   *Delivered:* `docs/integration/`, containing:
+   - Claude Code, Cursor and git pre-commit hook examples around a shared runner;
+   - a GitHub Actions example implementing section 9, which is not enabled;
+   - the by-hand agent demo kit: `agent-demo/prepare.sh`, the prompt and a checklist.
+
+   Also a root `README.md`. The agent demo itself is run by a human. Evidence in `step5/2026-11-18-step5-evidence.md`.
 
 ## 9. Trust boundary
 
