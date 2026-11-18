@@ -65,6 +65,24 @@ func loadSchemas(dir string) (*schemaSet, error) {
 		}
 		ids[filepath.Base(p)] = id
 	}
+	invs, _ := filepath.Glob(filepath.Join(dir, "stdlib-*.txt"))
+	if len(invs) == 0 {
+		return nil, fmt.Errorf("no stdlib-<go_version>.txt inventory in %s", dir)
+	}
+	for _, p := range invs {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		v := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "stdlib-"), ".txt")
+		set := map[string]bool{}
+		for _, line := range strings.Split(string(raw), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				set[line] = true
+			}
+		}
+		stdlibInventory[v] = set
+	}
 	return &schemaSet{c, ids}, nil
 }
 

@@ -9,7 +9,11 @@
   "s1-assumptions-duplicate.json": "are equal",
   "s1-assumptions-unsorted.json": "assumptions not strictly sorted",
   "s1-count-does-not-reconcile.json": "assumption trusted_stdlib exempted_count 4410, but 2 diagnostics",
+  "s1-dotless-module-claims-stdlib.json": "unit_origin stdlib for \"app/internal/helper\" contradicts the go1.26.11 standard-library inventory",
+  "s1-dotless-module-trusted.json": "trusted_stdlib exemption needs an unknown-call kind with unit_origin stdlib and a unit in the go1.26.11 standard-library inventory (got unresolved_interface_call, unit_origin \"module\", unit \"app/internal/helper\")",
   "s1-exempted-but-indeterminate.json": "exempted_by': got string, want null",
   "s1-missing-no-possible-target.json": "assumption no_possible_target is not listed",
-  "s1-trusted-stdlib-on-chi.json": "trusted_stdlib exemption needs an unknown-call kind owned by a standard-library unit"
+  "s1-shard-module-unit-claims-stdlib.json": "unit example.com/spike/cmd/server: origin stdlib contradicts the go1.26.11 standard-library inventory",
+  "s1-trusted-stdlib-on-chi.json": "trusted_stdlib exemption needs an unknown-call kind with unit_origin stdlib",
+  "s1-trusted-without-provenance.json": "unit_origin \"\""
 }

@@ -652,7 +652,7 @@
           }
         },
         "exempted_by": {
-          "description": "The policy-contract section 7 assumption that exempted this diagnostic from restrict_concept_to_boundary relevance, or null. Attribution rules (README): trusted_stdlib only for diagnostics owned by a standard-library unit; no_possible_target only for zero-target unresolved_interface_call/unresolved_dynamic_call sites outside the standard library.",
+          "description": "The policy-contract section 7 assumption that exempted this diagnostic from restrict_concept_to_boundary relevance, or null. Attribution rules (README, Assumptions): trusted_stdlib requires unit_origin stdlib and unit_id in the pinned standard-library inventory; no_possible_target requires unit_origin module or dependency and a zero-target unresolved call site.",
           "anyOf": [
             {
               "type": "null"
@@ -661,6 +661,21 @@
               "enum": [
                 "trusted_stdlib",
                 "no_possible_target"
+              ]
+            }
+          ]
+        },
+        "unit_origin": {
+          "description": "Loader provenance of unit_id, copied from the owning shard's unit.origin (module, dependency or stdlib); null for global diagnostics. Optional in 0.3 for compatibility, but required on every diagnostic with a non-null exempted_by, because it is the evidence for the attribution. A validator cross-checks stdlib against the pinned standard-library inventory (stdlib-<go_version>.txt).",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "module",
+                "dependency",
+                "stdlib"
               ]
             }
           ]

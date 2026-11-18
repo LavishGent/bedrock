@@ -58,7 +58,8 @@
       "id": "diag:ae68304f26a97fe6",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": null
+      "exempted_by": null,
+      "unit_origin": null
     }
   ]
 }

@@ -120,6 +120,9 @@ func checkShard(d obj) []string {
 	c := &checker{}
 	u := d["unit"].(obj)
 	uid := str(u["id"])
+	if in, known := inStdlib(shardGoVersion, uid); known && (u["origin"] == "stdlib") != in {
+		c.errf("unit %s: origin %v contradicts the %s standard-library inventory (in inventory: %v)", uid, u["origin"], shardGoVersion, in)
+	}
 
 	files := arr(u["files"])
 	c.sortedBy("unit.files", files, func(o obj) string { return str(o["path"]) })
@@ -314,6 +317,10 @@ func checkManifest(d obj) []string {
 	return c.errs
 }
 
+// shardGoVersion is the toolchain shards are checked against. A shard does not
+// carry its build profile, only its digest; the POC pins one toolchain.
+const shardGoVersion = "go1.26.11"
+
 // runLevelKinds must have relevance global: they invalidate the whole run.
 var runLevelKinds = map[string]bool{
 	"policy_missing": true, "policy_invalid": true, "policy_no_rules": true,
@@ -329,11 +336,18 @@ var unknownCallKinds = map[string]bool{
 	"bodyless_function": true, "reflection_call": true, "unsafe_pointer": true,
 }
 
-// isStdlib applies Go's rule: standard-library import paths have no dot in
-// their first path element.
-func isStdlib(unit string) bool {
-	first, _, _ := strings.Cut(unit, "/")
-	return unit != "" && !strings.Contains(first, ".")
+// stdlibInventory maps a Go version to its standard-library package set,
+// loaded from stdlib-<version>.txt next to the schemas (go list std under the
+// pinned profile). Standard-library provenance is never inferred from the
+// shape of an import path: Go allows dotless module paths such as "app".
+var stdlibInventory = map[string]map[string]bool{}
+
+func inStdlib(goVersion, unit string) (in, known bool) {
+	inv, ok := stdlibInventory[goVersion]
+	if !ok {
+		return false, false
+	}
+	return inv[unit], true
 }
 
 var relevanceRank = map[string]string{"global": "0", "indeterminate": "1", "warning": "2"}
@@ -359,6 +373,7 @@ func checkReport(d obj) []string {
 	c.sortedBy("diagnostics", diags, func(o obj) string {
 		return relevanceRank[str(o["relevance"])] + str(o["id"])
 	})
+	goVersion := str(d["build_profile"].(obj)["go_version"])
 	dByRule := map[string][]string{}
 	indet, global, warn := 0, 0, 0
 	policyFailed := false
@@ -388,18 +403,32 @@ func checkReport(d obj) []string {
 		if policyFailureKinds[kind] {
 			policyFailed = true
 		}
-		// S1: exemption attribution must be verifiable from the diagnostic.
+		// S1: exemption attribution must be verifiable from the diagnostic's
+		// provenance (unit_origin, from the loader) cross-checked against the
+		// pinned standard-library inventory.
+		origin, hasOrigin := x["unit_origin"].(string)
+		if hasOrigin && unit != "" {
+			in, known := inStdlib(goVersion, unit)
+			switch {
+			case !known && origin == "stdlib":
+				c.errf("diagnostic %s: unit_origin stdlib but no standard-library inventory for %s", id, goVersion)
+			case known && (origin == "stdlib") != in:
+				c.errf("diagnostic %s: unit_origin %s for %q contradicts the %s standard-library inventory (in inventory: %v)", id, origin, unit, goVersion, in)
+			}
+		}
 		switch by := str(x["exempted_by"]); by {
 		case "":
 		case "trusted_stdlib":
 			exempted[by]++
-			if !unknownCallKinds[kind] || !isStdlib(unit) {
-				c.errf("diagnostic %s: trusted_stdlib exemption needs an unknown-call kind owned by a standard-library unit (got %s in %q)", id, kind, unit)
+			in, _ := inStdlib(goVersion, unit)
+			if !unknownCallKinds[kind] || origin != "stdlib" || !in {
+				c.errf("diagnostic %s: trusted_stdlib exemption needs an unknown-call kind with unit_origin stdlib and a unit in the %s standard-library inventory (got %s, unit_origin %q, unit %q)", id, goVersion, kind, origin, unit)
 			}
 		case "no_possible_target":
 			exempted[by]++
-			if (kind != "unresolved_interface_call" && kind != "unresolved_dynamic_call") || isStdlib(unit) || x["site_id"] == nil {
-				c.errf("diagnostic %s: no_possible_target exemption needs a zero-target unresolved call site outside the standard library (got %s in %q)", id, kind, unit)
+			if (kind != "unresolved_interface_call" && kind != "unresolved_dynamic_call") || x["site_id"] == nil ||
+				(origin != "module" && origin != "dependency") {
+				c.errf("diagnostic %s: no_possible_target exemption needs a zero-target unresolved call site with unit_origin module or dependency (got %s, unit_origin %q)", id, kind, origin)
 			}
 		}
 	}

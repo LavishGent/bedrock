@@ -68,28 +68,40 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
-// In this state Export queries h.DB directly (the seeded db-in-repo
-// violation), so it is exercised through the test-only stub driver.
-func TestExportThroughDB(t *testing.T) {
-	admin := server.NewAdmin(handler.New(&fakeStore{}, openStub("ok")))
-	rec := serve(t, admin, "GET", "/internal/export", "demo-token-admin", "")
-	if rec.Code != 200 {
-		t.Fatalf("export with auth: status %d, want 200", rec.Code)
-	}
-	var got []repo.Item
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("export body %q: %v", rec.Body.String(), err)
-	}
+// Export is exercised with one stub DB per case, passed both as the Store
+// (through repo.New) and as the DB, so the assertions hold for the seeded
+// implementation (h.DB.QueryContext) and for the approved fix
+// (h.Store.ListItems) alike.
+func TestExport(t *testing.T) {
 	want := []repo.Item{{ID: 1, Name: "widget", Cents: 250}, {ID: 2, Name: "gadget", Cents: 1000}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("export rows %+v, want %+v", got, want)
+	cases := []struct {
+		name, dsn, token string
+		status           int
+		rows             []repo.Item
+	}{
+		{"ok", "ok", "demo-token-admin", 200, want},
+		{"db failure", "fail", "demo-token-admin", 500, nil},
+		{"no auth", "ok", "", 401, nil},
 	}
-
-	failing := server.NewAdmin(handler.New(&fakeStore{}, openStub("fail")))
-	if code := do(t, failing, "GET", "/internal/export", "demo-token-admin", ""); code != 500 {
-		t.Fatalf("export with failing DB: status %d, want 500", code)
-	}
-	if code := do(t, failing, "GET", "/internal/export", "", ""); code != 401 {
-		t.Fatalf("export without auth: status %d, want 401 (auth runs before the DB)", code)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := openStub(c.dsn)
+			t.Cleanup(func() { _ = db.Close() })
+			admin := server.NewAdmin(handler.New(repo.New(db), db))
+			rec := serve(t, admin, "GET", "/internal/export", c.token, "")
+			if rec.Code != c.status {
+				t.Fatalf("status %d, want %d (body %q)", rec.Code, c.status, rec.Body.String())
+			}
+			if c.rows == nil {
+				return
+			}
+			var got []repo.Item
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("body %q: %v", rec.Body.String(), err)
+			}
+			if !reflect.DeepEqual(got, c.rows) {
+				t.Fatalf("rows %+v, want %+v", got, c.rows)
+			}
+		})
 	}
 }

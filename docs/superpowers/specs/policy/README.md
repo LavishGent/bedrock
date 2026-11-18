@@ -159,11 +159,11 @@ Further details:
 - **Scope projection.** A route is governed iff the package containing its registration call is in `scope`. That package is `route.unit_id`, the owner of `registered_in`. The handler's package and the router's type are irrelevant. Package scope is the only way to scope routes in version 1.
 - **Requirement.** A governed route is satisfied iff its effective middleware chain, computed per the router support matrix, contains at least one symbol in the `middleware` concept set, at any position.
 - **Violations.** Each unsatisfied, non-excepted governed route is one violation. This includes each duplicate registration, since duplicates are separate routes. The location is the registration call.
-- **Indeterminate cases.** These give diagnostics that affect the rule and are listed in the router matrix:
-  - a governed route whose path or handler is unresolved, or whose chain contains an unresolved or unsupported middleware form;
-  - any unsupported registration form in a module package.
-
-  A route that matches an exception needs no middleware, so an unresolved chain on it is only a warning. An unresolved *path* cannot be checked against the exceptions, so it stays relevant.
+- **Indeterminate cases** (router matrix, section 2, "Which rules a diagnostic affects"):
+  - **Unknown registration identity:** a registration whose router or route Bedrock cannot identify. It affects every `require_middleware` rule, module-wide.
+  - **Known registration site, no route fact** (an invalid, bounded-out or same-mux conflicting pattern). It affects each rule whose scope contains the registering package.
+  - **Known route, uncertain chain.** It affects a rule only if that route is governed by the rule (in its scope, and matching none of its `except_routes`). For any other rule it is a warning.
+  - **Known route, unresolved path.** It affects each rule whose scope contains the registering package, because the exceptions cannot be checked.
 
 **Route patterns** (`except_routes`) have the form `[METHOD ]PATH`:
 
@@ -194,7 +194,7 @@ Further details:
 
 `restrict_concept_to_boundary` treats unknown calls conservatively. An unknown call is an unresolved interface or dynamic call, a bodyless function, reflection or `unsafe`. Per plan section 7, such a call that is reachable from a governed `Entry`, or sitting in a governed unit, makes the rule `INDETERMINATE`, except where one of two criteria applies. These criteria are **assumptions**, not facts proven by the analysis:
 
-1. **Trusted standard library (`trusted_stdlib`).** A diagnostic whose call site is owned by a standard-library unit of the pinned toolchain (`go1.26.11`, `unit.origin = stdlib`) is not counted.
+1. **Trusted standard library (`trusted_stdlib`).** A diagnostic whose call site is owned by a standard-library unit of the pinned toolchain is not counted. Standard library here means `go1.26.11`, `unit.origin = stdlib` from the loader, and listed in the pinned inventory.
    - **The assumption:** standard-library code reaches user code only through calls the analysis models (resolved interface, function-value and VTA edges), and never runs a database query on its own.
    - **Scope:** it covers only standard-library code at the pinned version. Module code and third-party code (including `chi`) get no trust.
    - **Example:** on the clean step 0 spike, this exempts the 4,410 standard-library diagnostics.
@@ -214,8 +214,9 @@ Every report that evaluates a `restrict_concept_to_boundary` rule lists **both**
 
 Each exempted diagnostic remains in `diagnostics` with relevance `warning` and `exempted_by` naming the criterion. `exempted_count` is exactly the number of such diagnostics. Attribution must be checkable from the diagnostic:
 
-- `trusted_stdlib` applies only to an unknown-call diagnostic whose `unit_id` is a standard-library package. Go's rule: no dot in the first path element.
-- `no_possible_target` applies only to an `unresolved_interface_call` or `unresolved_dynamic_call` site outside the standard library.
+- **Standard-library membership is provenance, not path shape.** A unit is standard library only if the loader reports it as part of GOROOT (`unit.origin = stdlib`: no owning module) **and** it appears in the pinned inventory `../schema/stdlib-go1.26.11.txt`. A dotless module path such as `app/internal/helper` is module code and gets no trust.
+- `trusted_stdlib` applies only to an unknown-call diagnostic whose `unit_origin` is `stdlib` and whose `unit_id` is in that inventory.
+- `no_possible_target` applies only to an `unresolved_interface_call` or `unresolved_dynamic_call` site whose `unit_origin` is `module` or `dependency`.
 - A standard-library zero-target site satisfies both criteria and is attributed to `trusted_stdlib`.
 
 `spike/schemacheck` enforces all of this. Changing the pinned Go version invalidates the trust until it is re-reviewed.

@@ -239,7 +239,8 @@
           "reason": "reachable_from_governed_entry"
         }
       ],
-      "exempted_by": null
+      "exempted_by": null,
+      "unit_origin": "module"
     },
     {
       "kind": "unresolved_dynamic_call",
@@ -259,7 +260,8 @@
       "id": "diag:276a1a24d9f26e54",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": "no_possible_target"
+      "exempted_by": "no_possible_target",
+      "unit_origin": "dependency"
     },
     {
       "kind": "unsupported_layout",
@@ -279,7 +281,8 @@
       "id": "diag:afd96e7935a555f3",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": null
+      "exempted_by": null,
+      "unit_origin": null
     },
     {
       "kind": "duplicate_route",
@@ -299,7 +302,8 @@
       "id": "diag:c9385cca0e69361c",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": null
+      "exempted_by": null,
+      "unit_origin": "module"
     },
     {
       "kind": "unresolved_interface_call",
@@ -319,7 +323,8 @@
       "id": "diag:cf0da04e9149a052",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": "trusted_stdlib"
+      "exempted_by": "trusted_stdlib",
+      "unit_origin": "stdlib"
     },
     {
       "kind": "bodyless_function",
@@ -339,7 +344,8 @@
       "id": "diag:fc87141e897af96d",
       "relevance": "warning",
       "affects_rules": [],
-      "exempted_by": "trusted_stdlib"
+      "exempted_by": "trusted_stdlib",
+      "unit_origin": "stdlib"
     }
   ]
 }

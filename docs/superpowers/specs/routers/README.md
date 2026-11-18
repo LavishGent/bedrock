@@ -105,7 +105,43 @@ Anything else is `unsupported_router_form`:
 
 **Router escape.** A supported value created in a module package may be used as a registration receiver, returned, passed as the `handler` of `http.ListenAndServe`/`ListenAndServeTLS`/`Serve`, or assigned to the `Handler` field of an `http.Server` literal. Passing it to any other function gives `unsupported_router_form` in the creating package. This is the "router registered in a helper package" case of plan section 6.
 
-**Which rules the diagnostic affects.** Bedrock cannot tell which router an unsupported registration belongs to. So an `unsupported_router_form`, `unsupported_middleware_form` or `unresolved_dynamic_route` diagnostic in **any** module package affects every `require_middleware` rule (reason `route_registration` or `middleware_chain`). The one exception is a governed route that matches an exception (policy contract, section 6.2).
+**Which rules a diagnostic affects** depends on how much Bedrock knows about the route.
+
+| Situation | Diagnostic | Affects |
+| --- | --- | --- |
+| **Unknown registration identity:** the receiver fails the identity rules, a supported router escapes into a helper, or the registration uses an API outside the matrix (section 1). Bedrock cannot tell which router, route or scope it belongs to. | `unsupported_router_form` | **Every** `require_middleware` rule, module-wide (reason `route_registration`). |
+| **Known registration site, no route fact:** the receiver is supported but the registration is rejected, because the pattern is invalid or bounded out, or it conflicts on the same mux (section 5). | `unsupported_router_form` | Each rule whose `scope` contains the registering package (reason `route_registration`). The path is unknown, so exceptions cannot apply. |
+| **Known route, uncertain chain:** a middleware argument is not a direct reference, a late `Use`, a conditional `Use`/`With`, or a wrapper other than the direct form. | `unsupported_middleware_form` on each affected route | Each rule **for which that route is governed**: the registering package is in the rule's `scope`, and the route matches none of that rule's `except_routes` (reason `middleware_chain`). Otherwise the diagnostic is a warning for that rule. |
+| **Known route, unresolved path or handler.** | `unresolved_dynamic_route` | Each rule whose `scope` contains the registering package. An unresolved path cannot be checked against exceptions. With a resolved path but unresolved handler, the rule's exceptions apply (reason `route_registration`). |
+
+Example, with two disjoint route scopes and a per-rule exception:
+
+```toml
+[boundary.api_routes]
+packages = ["example.com/app/internal/api"]
+[boundary.admin_routes]
+packages = ["example.com/app/internal/admin"]
+
+[[rule]]
+id = "api-auth"
+kind = "require_middleware"
+scope = "api_routes"
+middleware = "auth.middleware"
+except_routes = ["GET /healthz"]
+[[rule]]
+id = "admin-auth"
+kind = "require_middleware"
+scope = "admin_routes"
+middleware = "auth.middleware"
+```
+
+| Code | Diagnostic | `api-auth` | `admin-auth` |
+| --- | --- | --- | --- |
+| `internal/admin`: `r.Use(middleware.Timeout(5*time.Second)); r.Get("/users", h.Users)` | `unsupported_middleware_form` on `GET /users` | not affected (route not in scope) | **indeterminate** |
+| `internal/api`: `r.With(mk()).Get("/healthz", h.Health)` | `unsupported_middleware_form` on `GET /healthz` | warning (excepted by `GET /healthz`) | not affected |
+| `internal/api`: `r.With(mk()).Get("/items", h.Items)` | `unsupported_middleware_form` on `GET /items` | **indeterminate** | not affected |
+| `internal/api`: `mux.Handle("GET /x/{b}", h.B)` after `mux.Handle("GET /x/{a}", h.A)` | `unsupported_router_form` (same-mux conflict, no fact) | **indeterminate** | not affected |
+| `internal/util`: `func reg(r chi.Router) { r.Get("/z", h.Z) }` | `unsupported_router_form` (receiver is a parameter) | **indeterminate** | **indeterminate** |
 
 ## 3. Handlers and the direct wrapper form
 
@@ -237,7 +273,9 @@ Fixtures: `testdata/routerfixtures/paths`. Each case records the registration an
 - **Host.** Bounded subset: no host. `"example.com/x"` is bounded out.
 - **Path.** The path is kept as written: `{name}`, `{name...}`, a trailing `/` (subtree) and `{$}` (exact) all stay. `/files/` and `/files/{$}` are different routes.
   - Bounded subset: no empty, `.` or `..` segments (`//`, `/./`, `/../`). Go accepts them but redirects cleaned requests away from them.
-- **Duplicates.** An exact duplicate pattern on one mux makes Go panic, so it is `unsupported_router_form`.
+- **Duplicates and conflicts on one mux.** The analyzer keeps **registration state per mux identity**. It replays each constant pattern, in source order, onto one scratch `http.ServeMux` per identity, under `recover`. A registration that panics there gives `unsupported_router_form` and **no route fact**. That covers an invalid pattern, an identical pattern, and a pattern that conflicts with an earlier one, such as `GET /x/{a}` then `GET /x/{b}`. Patterns Go accepts together, such as `GET /x` and `/x`, are separate facts.
+
+  **Earlier facts survive.** Valid registrations before the rejected one keep their route facts and are evaluated normally. At run time, Go panics at the conflicting registration, while the earlier route is already in place and serving (fixture `nethttp-same-mux-identical`). Keeping the earlier facts never hides a missing middleware. The rejected registration still produces a diagnostic under the "known registration site" row in section 2.
 
 ### chi
 
@@ -262,6 +300,26 @@ Fixtures: `testdata/routerfixtures/paths`. Each case records the registration an
 - **Bounded subset.** No empty, `.` or `..` segments (chi accepts `//x`).
 
 `except_routes` patterns compare the method case-sensitively against these normalized methods (policy contract, section 6.2).
+
+### Duplicate normalized keys across routers
+
+Two **valid** registrations with the same normalized method and path in one unit are both kept as route facts. They get `duplicate_index` 0, 1, ... in (file, line, column) order, and the later ones get a `duplicate_route` warning. This happens in three cases:
+
+- on **distinct** ServeMux values, which Go accepts;
+- on chi values, including the same chi router, which does not panic. At run time the later registration wins, so keeping both is conservative: both are checked;
+- on a chi router and a ServeMux.
+
+Each copy must satisfy every rule that governs it. A same-mux net/http duplicate never reaches this step, because it has no fact.
+
+Fixtures: `testdata/routerfixtures/paths/dups.go` (`DupCases`). `dups_test.go` checks each case against the real router: whether it panics, and which handler serves. The cases:
+
+| Fixture | Facts |
+| --- | --- |
+| `nethttp-same-mux-identical` | `GET /a#0`, then `unsupported_router_form` (the earlier route still serves) |
+| `nethttp-same-mux-conflicting-wildcards` | `GET /x/{a}#0`, then `unsupported_router_form` |
+| `nethttp-same-mux-method-and-any` | `GET /x#0` and `* /x#0`, both kept, no conflict |
+| `nethttp-separate-muxes-identical` | `GET /a#0`, `GET /a#1` plus a `duplicate_route` warning |
+| `chi-same-mux-identical` | `GET /a#0`, `GET /a#1` plus a `duplicate_route` warning (the later one serves) |
 
 ## 6. Accepted and rejected code (summary)
 

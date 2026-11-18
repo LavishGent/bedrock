@@ -18,6 +18,7 @@ This README is normative. The JSON Schemas check structure. The rules below cove
 | `examples/analysis.illustrative.json` | A manifest with a global diagnostic. The unit list is abbreviated. |
 | `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic, plain warnings and three exempted diagnostics. It shows precedence, affected-rule reporting, and assumption counts that reconcile with `exempted_by` attributions. |
 | `examples/report.policy-missing.json`, `report.policy-no-rules.json`, `report.policy-invalid.json` | Policy failures: one diagnostic with relevance `global`, `rules: []`, `INDETERMINATE`, exit 2. |
+| `stdlib-go1.26.11.txt` | The pinned standard-library package inventory (`go list std`, linux/amd64, cgo off), used to check `stdlib` provenance. |
 | `examples/invalid/*.json` | Negative fixtures. Each must be rejected with the error text recorded in `examples/invalid/expect.json`. |
 
 Validate everything (from the repo root). The test accepts every `examples/*.json` and rejects every `examples/invalid/*.json` for its recorded reason:
@@ -36,6 +37,7 @@ Changelog:
 - **0.3** (step 1 review fixes). These changes are incompatible with 0.2:
   - **B1, run-level indeterminacy.** Report diagnostics gain relevance `global` (with `scope: global`, empty `affects_rules`), which drives the verdict to 2 directly. `summary.global_diagnostics` is new. A policy failure means `rules: []`. The `global_failure` reason is removed from `affects_rules`.
   - **S1, assumption attribution.** Report diagnostics gain the required `exempted_by`. When a `restrict_concept_to_boundary` rule is evaluated, both assumptions are listed, even with count 0. Counts must reconcile with `exempted_by`.
+  - **S1 follow-up (compatible):** report diagnostics gain optional `unit_origin`, required by semantics on exempted diagnostics; `stdlib-go1.26.11.txt` added.
   - **S4, method case.** Route methods may be lower case (net/http keeps the method as written).
 - **0.2** (step 1): the report gains the required `assumptions` array (`trusted_stdlib`, `no_possible_target`, each with `exempted_count`). Plan section 7 (owner decision A) requires the report to list the trusted-standard-library assumption and the count of calls it exempted. The relevance criteria themselves are defined in `../policy/README.md`.
 - **0.1** (step 0): initial version.
@@ -208,9 +210,11 @@ Entry = { s in all shards' symbols : s.in_universe
 - **Assumptions (S1)**:
   - **When listed.** `assumptions` is empty unless a `restrict_concept_to_boundary` rule is evaluated. Then it lists exactly `no_possible_target` and `trusted_stdlib`, sorted and unique, **even when a count is 0**.
   - **Counts.** Each exempted diagnostic stays in `diagnostics` with relevance `warning` and `exempted_by` naming its assumption. `exempted_count` must equal the number of diagnostics carrying that `exempted_by`.
-  - **Attribution** is checkable from the diagnostic itself, using Go's rule that a standard-library import path has no dot in its first element (policy contract, section 7):
-    - `trusted_stdlib` requires an unknown-call kind on a standard-library `unit_id`;
-    - `no_possible_target` requires an `unresolved_interface_call` or `unresolved_dynamic_call` with a `site_id`, on a non-standard-library unit. A standard-library zero-target site is attributed to `trusted_stdlib`.
+  - **Attribution is based on provenance, never on the shape of an import path.** Go allows dotless module paths such as `app/internal/helper`. The evidence is `unit_origin`, which the analyzer copies from the owning unit's loader-derived `unit.origin`. It is required on every exempted diagnostic. A validator cross-checks it against the pinned standard-library inventory `stdlib-<go_version>.txt`, the output of `go list std` under the pinned profile (360 packages for go1.26.11):
+    - `trusted_stdlib` requires an unknown-call kind, `unit_origin: stdlib`, and a `unit_id` in the inventory for the report's `build_profile.go_version`.
+    - `no_possible_target` requires an `unresolved_interface_call` or `unresolved_dynamic_call` with a `site_id`, and `unit_origin` `module` or `dependency`. A standard-library zero-target site is attributed to `trusted_stdlib`.
+    - Any diagnostic carrying `unit_origin` must agree with the inventory: `stdlib` iff the unit is in it. Shards are checked the same way: `unit.origin = stdlib` iff `unit.id` is in the inventory.
+    - Negative fixtures `s1-dotless-module-trusted`, `s1-dotless-module-claims-stdlib`, `s1-trusted-without-provenance` and `s1-shard-module-unit-claims-stdlib` must be rejected.
 - **Included and excluded scope**: the report lists included and excluded packages and files (plan section 7).
 
 ## Plan section 3 coverage
