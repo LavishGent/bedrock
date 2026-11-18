@@ -88,3 +88,68 @@ func TestVerdictPrecedence(t *testing.T) {
 		t.Fatalf("status %s/%d, rule b %s; want VIOLATION/1 with b INDETERMINATE", r.Status, r.ExitCode, r.Rules[1].Status)
 	}
 }
+
+// Known-route chain uncertainty is projected per rule scope and exceptions;
+// unknown registration identity reaches every rule (router matrix section 2).
+func TestRouteDiagProjection(t *testing.T) {
+	path, get := "/x", "GET"
+	loc := &facts.Location{Root: "repo", File: "a.go", Line: 1, Column: 1}
+	rt := &analyze.Route{Fact: facts.Route{ID: "route:m/a:GET:/x#0", UnitID: "m/a", Method: &get, Path: &path, Loc: loc},
+		Uncertain: []string{"diag:chain"}}
+	res := &analyze.Result{Module: []string{"m/a", "m/b"}, Routes: []*analyze.Route{rt},
+		MiddlewareShaped: map[string]bool{"m/a.Auth": true},
+		RouteDiags: []analyze.RouteDiag{
+			{Diag: facts.Diagnostic{ID: "diag:chain"}, Cat: analyze.CatChain, Unit: "m/a", Routes: []*analyze.Route{rt}},
+			{Diag: facts.Diagnostic{ID: "diag:identity"}, Cat: analyze.CatIdentity, Unit: "m/b"},
+		}}
+	pol := &policy.Policy{
+		Boundaries: map[string][]string{"a": {"m/a"}, "b": {"m/b"}},
+		Concepts:   map[string]policy.Concept{"auth": {Symbols: []string{"m/a.Auth"}}},
+	}
+	cases := []struct {
+		rule       policy.Rule
+		chain, any bool
+	}{
+		{policy.Rule{ID: "scope-a", Kind: policy.RequireMiddleware, Scope: "a", Middleware: "auth"}, true, true},
+		{policy.Rule{ID: "scope-b", Kind: policy.RequireMiddleware, Scope: "b", Middleware: "auth"}, false, true},
+		{policy.Rule{ID: "a-excepted", Kind: policy.RequireMiddleware, Scope: "a", Middleware: "auth", ExceptRoutes: []string{"GET /x"}}, false, true},
+	}
+	for _, c := range cases {
+		vs, _, _, _, affects := requireMiddleware(pol, c.rule, res)
+		_, chain := affects["diag:chain"]
+		_, ident := affects["diag:identity"]
+		if chain != c.chain || ident != c.any {
+			t.Errorf("%s: chain diag affects=%v identity affects=%v; want %v %v", c.rule.ID, chain, ident, c.chain, c.any)
+		}
+		if len(vs) != 0 {
+			t.Errorf("%s: an uncertain chain must not give a violation, got %v", c.rule.ID, vs)
+		}
+	}
+}
+
+func TestMatchRoute(t *testing.T) {
+	get, post := "GET", "POST"
+	p := func(s string) *string { return &s }
+	cases := []struct {
+		pat    string
+		method *string
+		path   string
+		want   bool
+	}{
+		{"GET /healthz", &get, "/healthz", true},
+		{"GET /healthz", &post, "/healthz", false},
+		{"GET /healthz", nil, "/healthz", false},
+		{"/healthz", nil, "/healthz", true},
+		{"/public/**", &get, "/public", true},
+		{"/public/**", &get, "/public/a/b", true},
+		{"GET /api/v1/items/*", &get, "/api/v1/items/{id}", true},
+		{"GET /api/", &get, "/api", false},
+		{"GET /api", &get, "/api/", false},
+		{"get /x", &get, "/x", false},
+	}
+	for _, c := range cases {
+		if got := matchRoute(c.pat, c.method, p(c.path)); got != c.want {
+			t.Errorf("matchRoute(%q, %v, %q) = %v, want %v", c.pat, c.method, c.path, got, c.want)
+		}
+	}
+}

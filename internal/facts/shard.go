@@ -2,17 +2,17 @@ package facts
 
 // Shard is one unit_shard document.
 type Shard struct {
-	SchemaVersion      string       `json:"schema_version"`
-	Kind               string       `json:"kind"`
-	BuildProfileDigest string       `json:"build_profile_digest"`
-	Unit               Unit         `json:"unit"`
-	Symbols            []Symbol     `json:"symbols"`
-	ExternalSymbols    []ExtSymbol  `json:"external_symbols"`
-	Imports            []Import     `json:"imports"`
-	CallSites          []any        `json:"call_sites"`
-	Routes             []any        `json:"routes"`
-	RouteMiddleware    []any        `json:"route_middleware"`
-	Diagnostics        []Diagnostic `json:"diagnostics"`
+	SchemaVersion      string            `json:"schema_version"`
+	Kind               string            `json:"kind"`
+	BuildProfileDigest string            `json:"build_profile_digest"`
+	Unit               Unit              `json:"unit"`
+	Symbols            []Symbol          `json:"symbols"`
+	ExternalSymbols    []ExtSymbol       `json:"external_symbols"`
+	Imports            []Import          `json:"imports"`
+	CallSites          []any             `json:"call_sites"`
+	Routes             []Route           `json:"routes"`
+	RouteMiddleware    []RouteMiddleware `json:"route_middleware"`
+	Diagnostics        []Diagnostic      `json:"diagnostics"`
 }
 
 // Unit is the shard's unit record.
@@ -94,4 +94,28 @@ func ContentHash(files []File) string {
 		b = append(b, '\n')
 	}
 	return SHA256(b)
+}
+
+// Route is one registered HTTP route (shard schema route).
+type Route struct {
+	ID              string    `json:"id"`
+	UnitID          string    `json:"unit_id"`
+	Router          string    `json:"router"`
+	Method          *string   `json:"method"`
+	Path            *string   `json:"path"`
+	PatternRaw      *string   `json:"pattern_raw"`
+	DuplicateIndex  int       `json:"duplicate_index"`
+	HandlerSym      *string   `json:"handler_sym"`
+	HandlerValueSym *string   `json:"handler_value_sym"`
+	RegisteredIn    string    `json:"registered_in"`
+	Loc             *Location `json:"loc"`
+}
+
+// RouteMiddleware is one resolved middleware in a route's effective chain.
+type RouteMiddleware struct {
+	RouteID       string    `json:"route_id"`
+	MiddlewareSym string    `json:"middleware_sym"`
+	Order         int       `json:"order"`
+	Source        string    `json:"source"`
+	Loc           *Location `json:"loc"`
 }

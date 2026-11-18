@@ -121,6 +121,10 @@ type Result struct {
 	ExcludedFiles []facts.ExcludedFile // files of excluded directories
 	Global        []facts.Diagnostic   // scope=global diagnostics (layout, provenance)
 	Fatal         bool                 // an error-severity global diagnostic stopped loading
+
+	Routes           []*Route        // extracted routes, sorted by ID
+	RouteDiags       []RouteDiag     // route diagnostics with their reach
+	MiddlewareShaped map[string]bool // func/method ID -> has type func(http.Handler) http.Handler
 }
 
 // ModulePath reads the module path from dir/go.mod.
@@ -253,6 +257,7 @@ func Load(ctx context.Context, dir string) *Result {
 		})
 		u.Shard.Imports = u.Imports
 	}
+	res.attachRoutes(all, l)
 	compiledFiles := map[string]bool{} // every file the loader compiled, any package
 	for _, p := range all {
 		for _, f := range p.CompiledGoFiles {
@@ -470,7 +475,7 @@ func newShard(u facts.Unit, syms []facts.Symbol, diags []facts.Diagnostic) *fact
 	return &facts.Shard{
 		SchemaVersion: facts.SchemaVersion, Kind: "unit_shard", BuildProfileDigest: ProfileDigest(),
 		Unit: u, Symbols: syms, ExternalSymbols: []facts.ExtSymbol{}, Imports: []facts.Import{},
-		CallSites: []any{}, Routes: []any{}, RouteMiddleware: []any{}, Diagnostics: diags,
+		CallSites: []any{}, Routes: []facts.Route{}, RouteMiddleware: []facts.RouteMiddleware{}, Diagnostics: diags,
 	}
 }
 

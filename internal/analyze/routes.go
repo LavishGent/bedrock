@@ -1,0 +1,1274 @@
+package analyze
+
+// Route and middleware extraction per the router support matrix v1
+// (docs/superpowers/specs/routers/README.md). Identity is decided on SSA
+// values of module code; chain inheritance follows chi v5.5.0
+// (With/Group/Route snapshot semantics, late Use diagnosed and not credited);
+// net/http patterns are validated by replaying them on a scratch ServeMux per
+// mux identity; chi patterns and methods by a scratch chi router.
+
+import (
+	"fmt"
+	"go/constant"
+	"go/token"
+	"go/types"
+	"net/http"
+	"sort"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/go/ssa"
+
+	"github.com/LavishGent/bedrock/internal/facts"
+)
+
+const (
+	chiPath  = "github.com/go-chi/chi/v5"
+	httpPath = "net/http"
+)
+
+// Category says how far a route diagnostic reaches (router matrix, section 2,
+// "Which rules a diagnostic affects").
+type Category int
+
+const (
+	CatIdentity  Category = iota // unknown registration identity: every require_middleware rule
+	CatSite                      // known site, no route fact: rules whose scope has the unit
+	CatChain                     // known route, uncertain chain: rules governing the route
+	CatPath                      // known route, unresolved path: rules whose scope has the unit
+	CatHandler                   // known route, unresolved handler: rules governing the route
+	CatDuplicate                 // duplicate normalized key: warning only
+)
+
+// Route is an extracted route with its effective chain.
+type Route struct {
+	Fact      facts.Route
+	Chain     []ChainEntry
+	Uncertain []string // IDs of diagnostics that make the chain uncertain
+}
+
+// ChainEntry is one middleware in a route's chain, outermost first.
+type ChainEntry struct {
+	Sym        string
+	Source     string
+	Loc        *facts.Location
+	Unresolved bool
+	DiagID     string
+}
+
+// RouteDiag is a route-extraction diagnostic with its reach.
+type RouteDiag struct {
+	Diag   facts.Diagnostic
+	Cat    Category
+	Unit   string
+	Routes []*Route // CatChain / CatHandler: the routes it concerns
+}
+
+// fixedMethods are chi's direct registration methods (all supported).
+var fixedMethods = map[string]string{
+	"Get": "GET", "Post": "POST", "Put": "PUT", "Delete": "DELETE", "Patch": "PATCH",
+	"Head": "HEAD", "Options": "OPTIONS", "Connect": "CONNECT", "Trace": "TRACE", "Query": "QUERY",
+}
+
+// unsupportedChi are recognized chi registration APIs outside the matrix.
+var unsupportedChi = map[string]bool{
+	"Handle": true, "HandleFunc": true, "MethodFunc": true, "NotFound": true,
+	"MethodNotAllowed": true, "Mount": true,
+}
+
+// readOnlyChi are chi methods that do not register anything.
+var readOnlyChi = map[string]bool{
+	"ServeHTTP": true, "Routes": true, "Middlewares": true, "Match": true, "Find": true,
+	"NotFoundHandler": true, "MethodNotAllowedHandler": true,
+}
+
+type routerKind int
+
+const (
+	chiMux routerKind = iota
+	chiInline
+	httpMux
+)
+
+type router struct {
+	kind       routerKind
+	base       *router      // nearest chi mux (itself for a mux)
+	parent     *router      // router it was derived from (With/Group/Route), nil for a root
+	inherited  []ChainEntry // mux from Route: Chain(parent) at the Route call
+	own        []ChainEntry // L(X)
+	prefix     string
+	hadRoute   bool // a route (or mount) registered on it
+	hadDerive  bool // mux: With/Group/Route/Mount called on it
+	scratch    *http.ServeMux
+	routes     []*Route
+	lateDiags  []string // late-Use diagnostics: apply to all its routes
+	createdPos token.Pos
+}
+
+func (r *router) chain() []ChainEntry {
+	var out []ChainEntry
+	if r.kind == chiInline {
+		out = append(out, r.base.inherited...)
+		out = append(out, r.base.own...)
+		out = append(out, r.own...)
+	} else {
+		out = append(out, r.inherited...)
+		out = append(out, r.own...)
+	}
+	return append([]ChainEntry{}, out...)
+}
+
+// extractor holds program-wide extraction state.
+type extractor struct {
+	prog       *ssa.Program
+	l          *locator
+	pkgOf      map[*types.Package]*packages.Package
+	nested     map[*ssa.Function]bool // literals passed directly to Group/Route
+	defaultMux *router
+	routes     []*Route
+	diags      []RouteDiag
+	closures   map[string][]facts.Symbol // unit -> closure symbols
+	parents    map[string]*ssa.Function  // closure parent ID -> function (for package initializers)
+	wrappers   map[string]facts.Symbol   // $bound wrapper ID -> symbol (owner set later)
+}
+
+// extractRoutes builds SSA for the well-typed module packages and extracts
+// routes, middleware chains and diagnostics.
+func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) *extractor {
+	x := &extractor{l: l, pkgOf: map[*types.Package]*packages.Package{}, nested: map[*ssa.Function]bool{},
+		closures: map[string][]facts.Symbol{}, wrappers: map[string]facts.Symbol{}, parents: map[string]*ssa.Function{}}
+	if len(all) == 0 {
+		return x
+	}
+	x.prog = ssa.NewProgram(all[0].Fset, 0)
+	// Create SSA packages in dependency order, only when the package and all
+	// its imports are well typed.
+	created := map[*packages.Package]bool{}
+	var order []*packages.Package
+	packages.Visit(all, nil, func(p *packages.Package) { order = append(order, p) })
+	seen := map[*packages.Package]bool{}
+	var ordered []*packages.Package
+	for _, p := range order {
+		if !seen[p] {
+			seen[p] = true
+			ordered = append(ordered, p)
+		}
+	}
+	var modulePkgs []*ssa.Package
+	skipped := map[*packages.Package]bool{}
+	for _, p := range ordered {
+		ok := p.Types != nil && !p.IllTyped && len(p.Errors) == 0
+		for _, ip := range p.Imports {
+			if !created[ip] {
+				ok = false
+			}
+		}
+		if !ok {
+			if module[p.PkgPath] {
+				skipped[p] = true
+			}
+			continue
+		}
+		created[p] = true
+		x.pkgOf[p.Types] = p
+		sp := x.prog.CreatePackage(p.Types, p.Syntax, p.TypesInfo, true)
+		if module[p.PkgPath] {
+			modulePkgs = append(modulePkgs, sp)
+		}
+	}
+	// A governed package that cannot be built cannot have its routes
+	// extracted; if it uses a router package, that is unknown identity.
+	for p := range skipped {
+		for path := range p.Imports {
+			if path == chiPath || path == httpPath {
+				x.diag(CatIdentity, p.PkgPath, nil, "unresolved_dynamic_route",
+					"routes of "+p.PkgPath+" cannot be extracted: the package or one of its imports does not type-check", nil)
+				break
+			}
+		}
+	}
+	sort.Slice(modulePkgs, func(i, j int) bool { return modulePkgs[i].Pkg.Path() < modulePkgs[j].Pkg.Path() })
+	var fns []*ssa.Function
+	for _, sp := range modulePkgs {
+		sp.Build()
+		fns = append(fns, packageFuncs(x.prog, sp)...)
+	}
+	sort.Slice(fns, func(i, j int) bool { return fns[i].String() < fns[j].String() })
+	for _, fn := range fns {
+		x.scanNested(fn)
+		if fn.Parent() != nil {
+			unit := fn.Pkg.Pkg.Path()
+			x.parents[fn.Parent().String()] = fn.Parent()
+			x.closures[unit] = append(x.closures[unit], facts.Symbol{
+				ID: fn.String(), UnitID: unit, Kind: "closure", Name: fn.Name(), HasBody: true, InUniverse: true,
+				ParentID: facts.Str(fn.Parent().String()), Loc: x.pos(fn, fn.Pos()),
+			})
+		}
+	}
+	for _, fn := range fns {
+		if !x.nested[fn] {
+			x.process(fn, nil)
+		}
+	}
+	return x
+}
+
+// packageFuncs lists every function of a module package with a body:
+// package-level functions, declared methods and all nested literals.
+func packageFuncs(prog *ssa.Program, sp *ssa.Package) []*ssa.Function {
+	var out []*ssa.Function
+	var add func(fn *ssa.Function)
+	add = func(fn *ssa.Function) {
+		if fn == nil || fn.Blocks == nil {
+			return
+		}
+		out = append(out, fn)
+		for _, a := range fn.AnonFuncs {
+			add(a)
+		}
+	}
+	for _, m := range sp.Members {
+		switch m := m.(type) {
+		case *ssa.Function:
+			add(m)
+		case *ssa.Type:
+			named, ok := m.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+			for i := 0; i < named.NumMethods(); i++ {
+				add(prog.FuncValue(named.Method(i)))
+			}
+		}
+	}
+	return out
+}
+
+func (x *extractor) pos(fn *ssa.Function, p token.Pos) *facts.Location {
+	if fn.Pkg == nil {
+		return nil
+	}
+	pp := x.pkgOf[fn.Pkg.Pkg]
+	if pp == nil {
+		return nil
+	}
+	return x.l.pos(pp, p)
+}
+
+func (x *extractor) diag(cat Category, unit string, fn *ssa.Function, kind, msg string, loc *facts.Location, rs ...*Route) RouteDiag {
+	var sym *string
+	if fn != nil {
+		sym = facts.Str(fn.String())
+	}
+	sev := "error"
+	if cat == CatDuplicate {
+		sev = "warning"
+	}
+	d := RouteDiag{Diag: facts.NewDiagnostic(kind, sev, facts.Str(unit), sym, msg, loc), Cat: cat, Unit: unit, Routes: rs}
+	x.diags = append(x.diags, d)
+	return d
+}
+
+// op is a recognized router call.
+type op struct {
+	pkg    string // chiPath or httpPath
+	name   string // method or function name
+	recv   ssa.Value
+	args   []ssa.Value // without the receiver
+	isFunc bool        // package-level function (http.Handle, chi.RegisterMethod)
+}
+
+func isChiRouterType(t types.Type) bool {
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	n, ok := t.(*types.Named)
+	if !ok || n.Obj().Pkg() == nil || n.Obj().Pkg().Path() != chiPath {
+		return false
+	}
+	return n.Obj().Name() == "Mux" || n.Obj().Name() == "Router"
+}
+
+func classify(c *ssa.CallCommon) *op {
+	if c.IsInvoke() {
+		if isChiRouterType(c.Value.Type()) {
+			return &op{pkg: chiPath, name: c.Method.Name(), recv: c.Value, args: c.Args}
+		}
+		return nil
+	}
+	callee := c.StaticCallee()
+	if callee == nil || callee.Pkg == nil && callee.Object() == nil {
+		return nil
+	}
+	obj, _ := callee.Object().(*types.Func)
+	if obj == nil || obj.Pkg() == nil {
+		return nil
+	}
+	path := obj.Pkg().Path()
+	sig := obj.Type().(*types.Signature)
+	switch {
+	case path == chiPath && sig.Recv() != nil && isChiRouterType(sig.Recv().Type()) && len(c.Args) > 0:
+		return &op{pkg: chiPath, name: obj.Name(), recv: c.Args[0], args: c.Args[1:]}
+	case path == chiPath && sig.Recv() == nil && obj.Name() == "RegisterMethod":
+		return &op{pkg: chiPath, name: "RegisterMethod", isFunc: true, args: c.Args}
+	case path == httpPath && sig.Recv() != nil && len(c.Args) > 0 && isServeMux(sig.Recv().Type()) &&
+		(obj.Name() == "Handle" || obj.Name() == "HandleFunc"):
+		return &op{pkg: httpPath, name: obj.Name(), recv: c.Args[0], args: c.Args[1:]}
+	case path == httpPath && sig.Recv() == nil && (obj.Name() == "Handle" || obj.Name() == "HandleFunc"):
+		return &op{pkg: httpPath, name: obj.Name(), isFunc: true, args: c.Args}
+	}
+	return nil
+}
+
+func isServeMux(t types.Type) bool {
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	n, ok := t.(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "ServeMux"
+}
+
+func peel(v ssa.Value) ssa.Value {
+	for {
+		switch t := v.(type) {
+		case *ssa.ChangeType:
+			v = t.X
+		case *ssa.MakeInterface:
+			v = t.X
+		case *ssa.ChangeInterface:
+			v = t.X
+		default:
+			return v
+		}
+	}
+}
+
+func isDefaultMux(v ssa.Value) bool {
+	u, ok := v.(*ssa.UnOp)
+	if !ok || u.Op != token.MUL {
+		return false
+	}
+	g, ok := u.X.(*ssa.Global)
+	return ok && g.Pkg != nil && g.Pkg.Pkg.Path() == httpPath && g.Name() == "DefaultServeMux"
+}
+
+func constString(v ssa.Value) (string, bool) {
+	c, ok := v.(*ssa.Const)
+	if !ok || c.Value == nil || c.Value.Kind() != constant.String {
+		return "", false
+	}
+	return constant.StringVal(c.Value), true
+}
+
+// scanNested marks function literals passed directly as fn to Group/Route.
+func (x *extractor) scanNested(fn *ssa.Function) {
+	for _, b := range fn.Blocks {
+		for _, ins := range b.Instrs {
+			ci, ok := ins.(ssa.CallInstruction)
+			if !ok {
+				continue
+			}
+			o := classify(ci.Common())
+			if o == nil || o.pkg != chiPath || (o.name != "Group" && o.name != "Route") || len(o.args) == 0 {
+				continue
+			}
+			if lit := literal(fn, o.args[len(o.args)-1]); lit != nil {
+				x.nested[lit] = true
+			}
+		}
+	}
+}
+
+// literal returns the function literal written in place in parent, if v is one.
+func literal(parent *ssa.Function, v ssa.Value) *ssa.Function {
+	switch t := peel(v).(type) {
+	case *ssa.Function:
+		if t.Parent() == parent {
+			return t
+		}
+	case *ssa.MakeClosure:
+		if f, ok := t.Fn.(*ssa.Function); ok && f.Parent() == parent {
+			return f
+		}
+	}
+	return nil
+}
+
+// unconditional reports the blocks executed exactly once on every normal
+// path: not in a cycle, and dominating every return block.
+func unconditional(fn *ssa.Function) map[*ssa.BasicBlock]bool {
+	var rets []*ssa.BasicBlock
+	for _, b := range fn.Blocks {
+		if len(b.Instrs) > 0 {
+			if _, ok := b.Instrs[len(b.Instrs)-1].(*ssa.Return); ok {
+				rets = append(rets, b)
+			}
+		}
+	}
+	if len(rets) == 0 {
+		for _, b := range fn.Blocks {
+			if len(b.Succs) == 0 {
+				rets = append(rets, b)
+			}
+		}
+	}
+	out := map[*ssa.BasicBlock]bool{}
+	for _, b := range fn.Blocks {
+		if inCycle(b) {
+			continue
+		}
+		all := true
+		for _, r := range rets {
+			if !b.Dominates(r) {
+				all = false
+			}
+		}
+		out[b] = all
+	}
+	return out
+}
+
+func inCycle(b *ssa.BasicBlock) bool {
+	seen := map[*ssa.BasicBlock]bool{}
+	stack := append([]*ssa.BasicBlock{}, b.Succs...)
+	for len(stack) > 0 {
+		c := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if c == b {
+			return true
+		}
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		stack = append(stack, c.Succs...)
+	}
+	return false
+}
+
+// process walks fn in block order. param, if non-nil, is the router value of
+// fn's first parameter (a Group/Route literal).
+func (x *extractor) process(fn *ssa.Function, param *router) {
+	unit := fn.Pkg.Pkg.Path()
+	env := map[ssa.Value]*router{}
+	if param != nil && len(fn.Params) > 0 {
+		env[fn.Params[0]] = param
+	}
+	uncond := unconditional(fn)
+	var owned []ssa.Value // router values created here (escape check)
+	if param != nil && len(fn.Params) > 0 {
+		owned = append(owned, fn.Params[0])
+	}
+	lookup := func(v ssa.Value) *router {
+		v = peel(v)
+		if isDefaultMux(v) {
+			return x.defaultMuxRouter()
+		}
+		return env[v]
+	}
+	for _, b := range fn.Blocks {
+		for _, ins := range b.Instrs {
+			ci, ok := ins.(ssa.CallInstruction)
+			if !ok {
+				continue
+			}
+			c := ci.Common()
+			loc := x.pos(fn, ci.Pos())
+			cond := !uncond[b]
+			if _, isGo := ins.(*ssa.Go); isGo {
+				cond = true
+			}
+			if _, isDefer := ins.(*ssa.Defer); isDefer {
+				cond = true
+			}
+			// Router constructors.
+			if callee := c.StaticCallee(); callee != nil && !c.IsInvoke() {
+				if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil {
+					name, path := obj.Name(), obj.Pkg().Path()
+					call, isCall := ins.(*ssa.Call)
+					if isCall && ((path == chiPath && (name == "NewRouter" || name == "NewMux")) || (path == httpPath && name == "NewServeMux")) {
+						r := &router{kind: chiMux, createdPos: ci.Pos()}
+						if path == httpPath {
+							r.kind, r.scratch = httpMux, http.NewServeMux()
+						}
+						r.base = r
+						env[call] = r
+						owned = append(owned, call)
+						continue
+					}
+				}
+			}
+			o := classify(c)
+			if o == nil {
+				continue
+			}
+			if o.isFunc {
+				if o.name == "RegisterMethod" {
+					x.diag(CatIdentity, unit, fn, "unsupported_router_form", "chi.RegisterMethod changes the set of valid methods globally (unsupported)", loc)
+					continue
+				}
+				// http.Handle / http.HandleFunc use DefaultServeMux.
+				x.register(fn, unit, x.defaultMuxRouter(), o, cond, loc)
+				continue
+			}
+			r := lookup(o.recv)
+			if r == nil {
+				if o.pkg == chiPath && readOnlyChi[o.name] {
+					continue
+				}
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form",
+					fmt.Sprintf("%s registration on a receiver that is not a supported router value (parameter, field, call result or merged value)", o.name), loc)
+				continue
+			}
+			if o.pkg == httpPath {
+				x.register(fn, unit, r, o, cond, loc)
+				continue
+			}
+			switch {
+			case readOnlyChi[o.name]:
+			case unsupportedChi[o.name]:
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form", "chi "+o.name+" is not supported by the router matrix v1", loc)
+				if o.name == "Mount" {
+					r.hadRoute, r.base.hadDerive = true, true
+				}
+			case fixedMethods[o.name] != "" || o.name == "Method":
+				x.register(fn, unit, r, o, cond, loc)
+			case o.name == "Use":
+				x.use(fn, unit, r, o.args[0], cond, loc)
+			case o.name == "With":
+				child := x.with(fn, unit, r, o.args[0], cond, loc)
+				if call, ok := ins.(*ssa.Call); ok && child != nil {
+					env[call] = child
+					owned = append(owned, call)
+				}
+			case o.name == "Group":
+				child := x.with(fn, unit, r, nil, false, loc)
+				if call, ok := ins.(*ssa.Call); ok {
+					env[call] = child
+					owned = append(owned, call)
+				}
+				x.body(fn, unit, child, o.args[len(o.args)-1], cond, loc, "Group")
+			case o.name == "Route":
+				p, ok := constString(o.args[0])
+				switch {
+				case !ok:
+					x.diag(CatSite, unit, fn, "unresolved_dynamic_route", "Route prefix is not a constant string", loc)
+				case !chiPatternOK(p) || badSegments(p):
+					x.diag(CatSite, unit, fn, "unsupported_router_form", fmt.Sprintf("Route prefix %q is rejected by chi or outside the bounded subset", p), loc)
+				default:
+					sub := &router{kind: chiMux, inherited: r.chain(), prefix: joinPrefix(r.prefix, p), createdPos: ci.Pos(), parent: r}
+					sub.base = sub
+					if call, ok := ins.(*ssa.Call); ok {
+						env[call] = sub
+						owned = append(owned, call)
+					}
+					x.body(fn, unit, sub, o.args[len(o.args)-1], cond, loc, "Route")
+				}
+				r.hadRoute = true
+				r.base.hadDerive = true
+			default:
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form", "chi "+o.name+" is not recognized by the router matrix v1", loc)
+			}
+		}
+	}
+	for _, v := range owned {
+		if why := escapes(v, map[ssa.Value]bool{}); why != "" {
+			x.diag(CatIdentity, unit, fn, "unsupported_router_form", "a router value escapes ("+why+"); routes registered elsewhere on it cannot be identified", x.pos(fn, v.Pos()))
+		}
+	}
+}
+
+func (x *extractor) defaultMuxRouter() *router {
+	if x.defaultMux == nil {
+		x.defaultMux = &router{kind: httpMux, scratch: http.NewServeMux()}
+		x.defaultMux.base = x.defaultMux
+	}
+	return x.defaultMux
+}
+
+// body processes a Group/Route literal with its sub-router.
+func (x *extractor) body(fn *ssa.Function, unit string, child *router, arg ssa.Value, cond bool, loc *facts.Location, what string) {
+	lit := literal(fn, arg)
+	switch {
+	case lit == nil:
+		x.diag(CatIdentity, unit, fn, "unsupported_router_form", what+" with a function that is not a literal written in place; its registrations cannot be identified", loc)
+	case cond:
+		x.diag(CatSite, unit, fn, "unsupported_router_form", what+" under a condition or in a loop", loc)
+	default:
+		x.process(lit, child)
+	}
+}
+
+// with creates the inline router I := r.With(mws...) (or Group's With()).
+func (x *extractor) with(fn *ssa.Function, unit string, r *router, mws ssa.Value, cond bool, loc *facts.Location) *router {
+	if r.kind == httpMux {
+		return nil
+	}
+	child := &router{kind: chiInline, base: r.base, prefix: r.prefix, parent: r}
+	if r.kind == chiInline {
+		child.own = append(child.own, r.own...) // snapshot at the With call
+	} else {
+		r.hadDerive = true
+	}
+	if mws != nil {
+		child.own = append(child.own, x.middlewares(fn, unit, mws, "with", cond, loc)...)
+	}
+	return child
+}
+
+// use appends r.Use(mws...) unless the Use is late or conditional.
+func (x *extractor) use(fn *ssa.Function, unit string, r *router, mws ssa.Value, cond bool, loc *facts.Location) {
+	late := r.hadRoute || (r.kind == chiMux && r.hadDerive)
+	if late {
+		d := x.diag(CatChain, unit, fn, "unsupported_middleware_form",
+			"late Use: chi panics when middleware is added after routes, With, Group, Route or Mount on the same router; the middleware is credited to no route", loc)
+		r.lateDiags = append(r.lateDiags, d.Diag.ID)
+		for _, rt := range r.routes {
+			rt.Uncertain = append(rt.Uncertain, d.Diag.ID)
+		}
+		x.diags[len(x.diags)-1].Routes = append(x.diags[len(x.diags)-1].Routes, r.routes...)
+		return
+	}
+	r.own = append(r.own, x.middlewares(fn, unit, mws, "use", cond, loc)...)
+}
+
+// middlewares resolves a variadic middleware argument.
+func (x *extractor) middlewares(fn *ssa.Function, unit string, v ssa.Value, source string, cond bool, loc *facts.Location) []ChainEntry {
+	unresolved := func(why string) []ChainEntry {
+		d := x.diag(CatChain, unit, fn, "unsupported_middleware_form", why, loc)
+		return []ChainEntry{{Source: source, Loc: loc, Unresolved: true, DiagID: d.Diag.ID}}
+	}
+	if cond {
+		return unresolved("conditional middleware: Use/With under a condition or in a loop")
+	}
+	if c, ok := v.(*ssa.Const); ok && c.IsNil() {
+		return nil
+	}
+	sl, ok := v.(*ssa.Slice)
+	if !ok {
+		return unresolved("middleware list is not written in place (spread or computed slice)")
+	}
+	alloc, ok := sl.X.(*ssa.Alloc)
+	if !ok {
+		return unresolved("middleware list is not written in place")
+	}
+	elems := map[int64]ssa.Value{}
+	for _, ref := range *alloc.Referrers() {
+		ia, ok := ref.(*ssa.IndexAddr)
+		if !ok {
+			continue
+		}
+		idx, ok := ia.Index.(*ssa.Const)
+		if !ok {
+			return unresolved("middleware list has a computed index")
+		}
+		for _, r2 := range *ia.Referrers() {
+			if st, ok := r2.(*ssa.Store); ok && st.Addr == ia {
+				elems[idx.Int64()] = st.Val
+			}
+		}
+	}
+	var out []ChainEntry
+	for i := int64(0); i < int64(len(elems)); i++ {
+		e, ok := elems[i]
+		if !ok {
+			return unresolved("middleware list has a gap")
+		}
+		sym, ok := directFunc(e)
+		if !ok {
+			out = append(out, unresolved("middleware is not a direct reference to a function or method value")...)
+			continue
+		}
+		out = append(out, ChainEntry{Sym: sym, Source: source, Loc: loc})
+	}
+	return out
+}
+
+// directFunc resolves a direct reference to a top-level function or a method
+// value (bound method wrapper) and returns the canonical symbol ID.
+func directFunc(v ssa.Value) (string, bool) {
+	switch t := peel(v).(type) {
+	case *ssa.Function:
+		if t.Parent() == nil && t.Synthetic == "" {
+			return t.String(), true
+		}
+	case *ssa.MakeClosure:
+		if f, ok := t.Fn.(*ssa.Function); ok && strings.HasSuffix(f.String(), "$bound") {
+			return strings.TrimSuffix(f.String(), "$bound"), true
+		}
+	}
+	return "", false
+}
+
+// handler resolves a direct handler: (handler_sym, handler_value_sym).
+func handler(fn *ssa.Function, v ssa.Value) (*string, *string, bool) {
+	switch t := peel(v).(type) {
+	case *ssa.Function:
+		if t.Synthetic == "" && (t.Parent() == nil || t.Parent() != nil) {
+			return facts.Str(t.String()), nil, true
+		}
+	case *ssa.MakeClosure:
+		f, ok := t.Fn.(*ssa.Function)
+		if !ok {
+			return nil, nil, false
+		}
+		if strings.HasSuffix(f.String(), "$bound") {
+			return facts.Str(strings.TrimSuffix(f.String(), "$bound")), facts.Str(f.String()), true
+		}
+		if f.Parent() != nil {
+			return facts.Str(f.String()), nil, true
+		}
+	}
+	return nil, nil, false
+}
+
+// isWrapperCall reports a call that wraps a handler: it takes an
+// http.Handler or http.HandlerFunc argument, or it comes from chi.
+func isWrapperCall(call *ssa.Call) bool {
+	if callee := call.Call.StaticCallee(); callee != nil {
+		if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == chiPath {
+			return true
+		}
+	}
+	for _, a := range call.Call.Args {
+		if isHTTPHandler(a.Type()) || isHandlerFunc(a.Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHandlerFunc(t types.Type) bool {
+	n, ok := t.(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "HandlerFunc"
+}
+
+// wrappedByChi reports a bound method value whose receiver is produced by a
+// chi wrapper call (Chain, Middlewares.Handler/HandlerFunc).
+func wrappedByChi(v ssa.Value) bool {
+	mc, ok := peel(v).(*ssa.MakeClosure)
+	if !ok || len(mc.Bindings) == 0 {
+		return false
+	}
+	call, ok := peel(mc.Bindings[0]).(*ssa.Call)
+	if !ok {
+		return false
+	}
+	callee := call.Call.StaticCallee()
+	if callee == nil {
+		return false
+	}
+	obj, _ := callee.Object().(*types.Func)
+	return obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == chiPath
+}
+
+func isMiddlewareSig(sig *types.Signature) bool {
+	if sig == nil || sig.Recv() != nil && false {
+		return false
+	}
+	return sig.Params().Len() == 1 && sig.Results().Len() == 1 && !sig.Variadic() &&
+		isHTTPHandler(sig.Params().At(0).Type()) && isHTTPHandler(sig.Results().At(0).Type())
+}
+
+func isHTTPHandler(t types.Type) bool {
+	n, ok := t.(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "Handler"
+}
+
+// register emits one route registration.
+func (x *extractor) register(fn *ssa.Function, unit string, r *router, o *op, cond bool, loc *facts.Location) {
+	if cond {
+		x.diag(CatSite, unit, fn, "unsupported_router_form", o.name+" registration under a condition or in a loop", loc)
+		return
+	}
+	if loc == nil {
+		x.diag(CatSite, unit, fn, "unsupported_router_form", o.name+" registration has no resolvable source location", nil)
+		return
+	}
+	rt := &Route{Fact: facts.Route{UnitID: unit, RegisteredIn: fn.String(), Loc: loc}}
+	var patV, hV ssa.Value
+	method := ""
+	switch {
+	case o.pkg == httpPath:
+		rt.Fact.Router = "net_http"
+		patV, hV = o.args[0], o.args[1]
+	case o.name == "Method":
+		rt.Fact.Router = "chi"
+		m, ok := constString(o.args[0])
+		if !ok {
+			x.diag(CatSite, unit, fn, "unresolved_dynamic_route", "Method with a non-constant method", loc)
+			return
+		}
+		method = strings.ToUpper(m)
+		if !chiMethodOK(m) {
+			x.diag(CatSite, unit, fn, "unsupported_router_form", fmt.Sprintf("chi rejects method %q (it would panic)", m), loc)
+			return
+		}
+		patV, hV = o.args[1], o.args[2]
+	default:
+		rt.Fact.Router = "chi"
+		method = fixedMethods[o.name]
+		patV, hV = o.args[0], o.args[1]
+	}
+	raw, constPat := constString(patV)
+	if constPat {
+		rt.Fact.PatternRaw = facts.Str(raw)
+		if o.pkg == httpPath {
+			m, p, why := netHTTPPattern(r.scratch, raw)
+			if why != "" {
+				x.diag(CatSite, unit, fn, "unsupported_router_form", fmt.Sprintf("net/http pattern %q: %s", raw, why), loc)
+				return
+			}
+			if m != "" {
+				rt.Fact.Method = facts.Str(m)
+			}
+			rt.Fact.Path = facts.Str(p)
+		} else {
+			if !chiPatternOK(raw) {
+				x.diag(CatSite, unit, fn, "unsupported_router_form", fmt.Sprintf("chi rejects pattern %q (it would panic)", raw), loc)
+				return
+			}
+			full := normalizeChi(joinPrefix(r.prefix, raw))
+			if badSegments(full) {
+				x.diag(CatSite, unit, fn, "unsupported_router_form", fmt.Sprintf("path %q has empty, . or .. segments (outside the bounded subset)", full), loc)
+				return
+			}
+			rt.Fact.Method = facts.Str(method)
+			rt.Fact.Path = facts.Str(full)
+		}
+	} else if o.pkg != httpPath {
+		rt.Fact.Method = facts.Str(method)
+	}
+	rt.Chain = r.chain()
+	// The handler, with the net/http direct wrapper form W(h).
+	hv := peel(hV)
+	if call, ok := hv.(*ssa.Call); ok && !isWrapperCall(call) {
+		// A plain call result (makeHandler()) is not a direct handler.
+		x.diag(CatHandler, unit, fn, "unresolved_dynamic_route", o.name+" handler is a call result, not a direct handler", loc)
+		hv = nil
+		defer func() { x.diags[len(x.diags)-1].Routes = append(x.diags[len(x.diags)-1].Routes, rt) }()
+	} else if ok {
+		w := call.Call.StaticCallee()
+		if o.pkg == httpPath && o.name == "Handle" && w != nil && w.Parent() == nil && w.Synthetic == "" &&
+			isMiddlewareSig(w.Signature) && len(call.Call.Args) == 1 {
+			if _, nested := peel(call.Call.Args[0]).(*ssa.Call); nested {
+				d := x.diag(CatChain, unit, fn, "unsupported_middleware_form", "nested handler wrappers W1(W2(h)) are not the direct wrapper form", loc)
+				rt.Chain = append(rt.Chain, ChainEntry{Source: "direct_wrapper", Loc: loc, Unresolved: true, DiagID: d.Diag.ID})
+			} else {
+				rt.Chain = append(rt.Chain, ChainEntry{Sym: w.String(), Source: "direct_wrapper", Loc: x.pos(fn, call.Pos())})
+				hv = call.Call.Args[0]
+			}
+		} else {
+			d := x.diag(CatChain, unit, fn, "unsupported_middleware_form", "the handler is wrapped by a call that is not the direct wrapper form W(h)", loc)
+			rt.Chain = append(rt.Chain, ChainEntry{Source: "direct_wrapper", Loc: loc, Unresolved: true, DiagID: d.Diag.ID})
+			hv = nil
+		}
+	}
+	if hv != nil && wrappedByChi(hv) {
+		// e.g. chi.Chain(mw).HandlerFunc(h).ServeHTTP: a method value on a
+		// chi wrapper is a wrapped handler, not a direct one.
+		d := x.diag(CatChain, unit, fn, "unsupported_middleware_form", "the handler is a method of a chi Chain/Middlewares wrapper, not a direct handler", loc)
+		rt.Chain = append(rt.Chain, ChainEntry{Source: "direct_wrapper", Loc: loc, Unresolved: true, DiagID: d.Diag.ID})
+		hv = nil
+	}
+	if hv != nil {
+		rt.Fact.HandlerSym, rt.Fact.HandlerValueSym, _ = handler(fn, hv)
+	}
+	for _, e := range rt.Chain {
+		if e.Unresolved {
+			rt.Uncertain = append(rt.Uncertain, e.DiagID)
+		}
+	}
+	// A late Use on any ancestor makes chi panic for the whole router tree.
+	for a := r; a != nil; a = a.parent {
+		rt.Uncertain = append(rt.Uncertain, a.lateDiags...)
+		a.routes = append(a.routes, rt) // routes of a and all its descendants
+	}
+	r.hadRoute = true
+	x.routes = append(x.routes, rt)
+	// Link chain diagnostics to the route they make uncertain.
+	for i := range x.diags {
+		for _, id := range rt.Uncertain {
+			if x.diags[i].Diag.ID == id {
+				x.diags[i].Routes = append(x.diags[i].Routes, rt)
+			}
+		}
+	}
+	if !constPat {
+		x.diag(CatPath, unit, fn, "unresolved_dynamic_route", o.name+" pattern is not a constant string", loc, rt)
+	} else if hv != nil && rt.Fact.HandlerSym == nil {
+		x.diag(CatHandler, unit, fn, "unresolved_dynamic_route", o.name+" handler is not a direct handler", loc, rt)
+	}
+}
+
+// escapes reports why a router value is used other than as allowed: a
+// registration receiver, returned, the handler of ListenAndServe/Serve, or
+// the Handler field of an http.Server.
+func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
+	if seen[v] || v.Referrers() == nil {
+		return ""
+	}
+	seen[v] = true
+	for _, ref := range *v.Referrers() {
+		switch t := ref.(type) {
+		case *ssa.DebugRef, *ssa.Return:
+		case *ssa.ChangeType:
+			if why := escapes(t, seen); why != "" {
+				return why
+			}
+		case *ssa.Phi:
+			// A merged router is transparent here: registrations through it
+			// are diagnosed at their receiver; other uses are checked below.
+			if why := escapes(t, seen); why != "" {
+				return why
+			}
+		case *ssa.MakeInterface:
+			if why := escapes(t, seen); why != "" {
+				return why
+			}
+		case *ssa.ChangeInterface:
+			if why := escapes(t, seen); why != "" {
+				return why
+			}
+		case *ssa.Store:
+			if fa, ok := t.Addr.(*ssa.FieldAddr); ok && t.Val == v && isHTTPServerHandlerField(fa) {
+				continue
+			}
+			return "stored"
+		case ssa.CallInstruction:
+			c := t.Common()
+			if o := classify(c); o != nil && !o.isFunc && o.recv == v {
+				continue
+			}
+			if c.IsInvoke() && c.Value == v {
+				continue
+			}
+			if callee := c.StaticCallee(); callee != nil {
+				if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == httpPath {
+					switch obj.Name() {
+					case "ListenAndServe", "ListenAndServeTLS", "Serve", "ServeTLS":
+						continue
+					}
+				}
+				if len(c.Args) > 0 && c.Args[0] == v && callee.Signature.Recv() != nil && isChiRouterType(callee.Signature.Recv().Type()) {
+					continue
+				}
+			}
+			return "passed to a function"
+		default:
+			return fmt.Sprintf("used by %T", ref)
+		}
+	}
+	return ""
+}
+
+func isHTTPServerHandlerField(fa *ssa.FieldAddr) bool {
+	st, ok := fa.X.Type().Underlying().(*types.Pointer)
+	if !ok {
+		return false
+	}
+	n, ok := st.Elem().(*types.Named)
+	if !ok || n.Obj().Pkg() == nil || n.Obj().Pkg().Path() != httpPath || n.Obj().Name() != "Server" {
+		return false
+	}
+	s := n.Underlying().(*types.Struct)
+	return s.Field(fa.Field).Name() == "Handler"
+}
+
+// netHTTPPattern validates a constant pattern by replaying it on the mux's
+// scratch ServeMux (so duplicates and conflicts on the same mux are caught),
+// then applies the bounded subset. It returns method ("" for any) and path.
+func netHTTPPattern(scratch *http.ServeMux, raw string) (method, path, why string) {
+	if msg := tryRegister(func() { scratch.HandleFunc(raw, func(http.ResponseWriter, *http.Request) {}) }); msg != "" {
+		return "", "", "net/http rejects it (it would panic): " + msg
+	}
+	rest := raw
+	if i := strings.IndexAny(raw, " \t"); i >= 0 {
+		method, rest = raw[:i], strings.TrimLeft(raw[i+1:], " \t")
+		for _, c := range method {
+			if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
+				return "", "", "method " + method + " is outside the bounded subset (letters only)"
+			}
+		}
+	}
+	if !strings.HasPrefix(rest, "/") {
+		return "", "", "host patterns are outside the bounded subset"
+	}
+	if badSegments(rest) {
+		return "", "", "empty, . or .. path segments are outside the bounded subset"
+	}
+	return method, rest, ""
+}
+
+func tryRegister(f func()) (msg string) {
+	defer func() {
+		if p := recover(); p != nil {
+			msg = fmt.Sprint(p)
+			if i := strings.Index(msg, " (registered at"); i >= 0 {
+				msg = msg[:i] // drop analyzer-internal file paths
+			}
+		}
+	}()
+	f()
+	return ""
+}
+
+func chiPatternOK(p string) bool {
+	return tryRegister(func() { chi.NewRouter().Get(p, func(http.ResponseWriter, *http.Request) {}) }) == ""
+}
+
+func chiMethodOK(m string) bool {
+	return tryRegister(func() { chi.NewRouter().Method(m, "/", http.NotFoundHandler()) }) == ""
+}
+
+// joinPrefix joins a Route prefix and a pattern: drop one trailing "/" from
+// the prefix, then concatenate (router matrix, section 5).
+func joinPrefix(prefix, p string) string {
+	return strings.TrimSuffix(prefix, "/") + p
+}
+
+// normalizeChi rewrites {name:regexp} parameters to {name}.
+func normalizeChi(p string) string {
+	var b strings.Builder
+	for i := 0; i < len(p); i++ {
+		if p[i] != '{' {
+			b.WriteByte(p[i])
+			continue
+		}
+		depth, j := 1, i+1
+		for ; j < len(p) && depth > 0; j++ {
+			switch p[j] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+		}
+		inner := p[i+1 : j-1]
+		if k := strings.IndexByte(inner, ':'); k >= 0 {
+			inner = inner[:k]
+		}
+		b.WriteString("{" + inner + "}")
+		i = j - 1
+	}
+	return b.String()
+}
+
+func badSegments(p string) bool {
+	segs := strings.Split(strings.TrimPrefix(p, "/"), "/")
+	for i, s := range segs {
+		if s == "." || s == ".." || (s == "" && i != len(segs)-1) {
+			return true
+		}
+	}
+	return false
+}
+
+// attachRoutes runs extraction and puts its facts into the unit shards:
+// routes with stable IDs and duplicate indexes, resolved middleware, the
+// closure and wrapper symbols they reference, external-symbol entries and
+// the route diagnostics.
+func (res *Result) attachRoutes(all []*packages.Package, l *locator) {
+	module := map[string]bool{}
+	for id, u := range res.Units {
+		if u.Origin == "module" {
+			module[id] = true
+		}
+	}
+	x := extractRoutes(all, module, l)
+	for unit, syms := range x.closures {
+		if u := res.Units[unit]; u != nil {
+			u.Shard.Symbols = append(u.Shard.Symbols, syms...)
+		}
+	}
+	owner := map[string]string{}
+	for id, u := range res.Units {
+		for _, s := range u.Shard.Symbols {
+			owner[s.ID] = id
+		}
+	}
+	// Closures inside package initializers (pkg.init, or a declared
+	// init#n) have a parent that go/types does not declare: add it.
+	var parentIDs []string
+	for pid := range x.parents {
+		parentIDs = append(parentIDs, pid)
+	}
+	sort.Strings(parentIDs)
+	for _, pid := range parentIDs {
+		if _, ok := owner[pid]; ok {
+			continue
+		}
+		pf := x.parents[pid]
+		unit := pf.Pkg.Pkg.Path()
+		u := res.Units[unit]
+		if u == nil {
+			continue
+		}
+		u.Shard.Symbols = append(u.Shard.Symbols, facts.Symbol{
+			ID: pid, UnitID: unit, Kind: "func", Name: pf.Name(), HasBody: true, InUniverse: true,
+			EntryHints: facts.EntryHints{IsInit: strings.HasPrefix(pf.Name(), "init")}, Loc: x.pos(pf, pf.Pos()),
+		})
+		owner[pid] = unit
+	}
+	// $bound wrappers used as handler values are owned by the method's unit.
+	for _, rt := range x.routes {
+		if rt.Fact.HandlerValueSym == nil {
+			continue
+		}
+		w := *rt.Fact.HandlerValueSym
+		m := strings.TrimSuffix(w, "$bound")
+		ou, ok := owner[m]
+		if !ok {
+			rt.Fact.HandlerSym, rt.Fact.HandlerValueSym = nil, nil
+			continue
+		}
+		if _, done := owner[w]; !done {
+			res.Units[ou].Shard.Symbols = append(res.Units[ou].Shard.Symbols, facts.Symbol{
+				ID: w, UnitID: ou, Kind: "wrapper", Name: w[strings.LastIndex(w, ".")+1:], Exported: token.IsExported(m[strings.LastIndex(m, ".")+1:]),
+				HasBody: true, InUniverse: true, OriginID: facts.Str(m), WrapperKind: facts.Str("bound"),
+				EntryHints: facts.EntryHints{AddressTaken: true},
+			})
+			owner[w] = ou
+		}
+	}
+	// Duplicate indexes per (unit, method, path) in location order.
+	type key struct{ unit, method, path string }
+	groups := map[key][]*Route{}
+	for _, rt := range x.routes {
+		k := key{rt.Fact.UnitID, deref(rt.Fact.Method, "*"), deref(rt.Fact.Path, "")}
+		groups[k] = append(groups[k], rt)
+	}
+	for k, rs := range groups {
+		sort.SliceStable(rs, func(i, j int) bool { return locKey(rs[i].Fact.Loc) < locKey(rs[j].Fact.Loc) })
+		for i, rt := range rs {
+			rt.Fact.DuplicateIndex = i
+			rt.Fact.ID = fmt.Sprintf("route:%s:%s:%s#%d", k.unit, k.method, k.path, i)
+			if i > 0 {
+				x.diag(CatDuplicate, k.unit, nil, "duplicate_route",
+					fmt.Sprintf("%s %s is registered more than once in this unit; each registration is checked separately", k.method, k.path), rt.Fact.Loc)
+			}
+		}
+	}
+	for _, rt := range x.routes {
+		u := res.Units[rt.Fact.UnitID]
+		if u == nil {
+			continue
+		}
+		u.Shard.Routes = append(u.Shard.Routes, rt.Fact)
+		for i, e := range rt.Chain {
+			if e.Unresolved {
+				continue
+			}
+			if _, ok := owner[e.Sym]; !ok {
+				// Not a symbol of any loaded unit (should not happen for a
+				// direct reference); keep the chain conservative.
+				d := x.diag(CatChain, rt.Fact.UnitID, nil, "unsupported_middleware_form", "middleware "+e.Sym+" is not a known symbol", e.Loc, rt)
+				rt.Chain[i].Unresolved, rt.Chain[i].DiagID = true, d.Diag.ID
+				rt.Uncertain = append(rt.Uncertain, d.Diag.ID)
+				continue
+			}
+			loc := e.Loc
+			if loc == nil {
+				loc = rt.Fact.Loc
+			}
+			u.Shard.RouteMiddleware = append(u.Shard.RouteMiddleware, facts.RouteMiddleware{
+				RouteID: rt.Fact.ID, MiddlewareSym: e.Sym, Order: i, Source: e.Source, Loc: loc})
+		}
+	}
+	for _, d := range x.diags {
+		if u := res.Units[d.Unit]; u != nil {
+			u.Shard.Diagnostics = append(u.Shard.Diagnostics, d.Diag)
+		}
+	}
+	// Normalize every shard: sorted, deduplicated, external symbols.
+	for id, u := range res.Units {
+		sh := u.Shard
+		sort.Slice(sh.Symbols, func(i, j int) bool { return sh.Symbols[i].ID < sh.Symbols[j].ID })
+		sort.Slice(sh.Routes, func(i, j int) bool { return sh.Routes[i].ID < sh.Routes[j].ID })
+		sort.Slice(sh.RouteMiddleware, func(i, j int) bool {
+			a, b := sh.RouteMiddleware[i], sh.RouteMiddleware[j]
+			if a.RouteID != b.RouteID {
+				return a.RouteID < b.RouteID
+			}
+			return a.Order < b.Order
+		})
+		seen := map[string]bool{}
+		diags := sh.Diagnostics[:0]
+		for _, d := range sh.Diagnostics {
+			if !seen[d.ID] {
+				seen[d.ID] = true
+				diags = append(diags, d)
+			}
+		}
+		sh.Diagnostics = diags
+		sortDiags(sh.Diagnostics)
+		ext := map[string]string{}
+		ref := func(s *string) {
+			if s != nil && owner[*s] != "" && owner[*s] != id {
+				ext[*s] = owner[*s]
+			}
+		}
+		for _, s := range sh.Symbols {
+			ref(s.ParentID)
+			ref(s.OriginID)
+		}
+		for _, r := range sh.Routes {
+			ref(r.HandlerSym)
+			ref(r.HandlerValueSym)
+			ref(&r.RegisteredIn)
+		}
+		for _, m := range sh.RouteMiddleware {
+			ref(&m.MiddlewareSym)
+		}
+		for _, d := range sh.Diagnostics {
+			ref(d.SymbolID)
+		}
+		sh.ExternalSymbols = []facts.ExtSymbol{}
+		for sid, ou := range ext {
+			sh.ExternalSymbols = append(sh.ExternalSymbols, facts.ExtSymbol{ID: sid, UnitID: ou})
+		}
+		sort.Slice(sh.ExternalSymbols, func(i, j int) bool { return sh.ExternalSymbols[i].ID < sh.ExternalSymbols[j].ID })
+	}
+	res.Routes = x.routes
+	res.RouteDiags = x.diags
+	sort.SliceStable(res.Routes, func(i, j int) bool { return res.Routes[i].Fact.ID < res.Routes[j].Fact.ID })
+	// Middleware shape of every declared function and method, for policy
+	// validation of middleware concepts.
+	res.MiddlewareShaped = map[string]bool{}
+	for _, p := range all {
+		if p.Types == nil {
+			continue
+		}
+		scope := p.Types.Scope()
+		for _, name := range scope.Names() {
+			switch o := scope.Lookup(name).(type) {
+			case *types.Func:
+				res.MiddlewareShaped[o.FullName()] = isMiddlewareSig(o.Type().(*types.Signature))
+			case *types.TypeName:
+				if n, ok := o.Type().(*types.Named); ok {
+					for i := 0; i < n.NumMethods(); i++ {
+						m := n.Method(i)
+						res.MiddlewareShaped[m.FullName()] = isMiddlewareSig(m.Type().(*types.Signature))
+					}
+				}
+			}
+		}
+	}
+}
+
+func deref(s *string, def string) string {
+	if s == nil {
+		return def
+	}
+	return *s
+}
+
+func locKey(l *facts.Location) string {
+	if l == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s\x00%012d\x00%012d", l.File, l.Line, l.Column)
+}
+
+func newScratch() *http.ServeMux { return http.NewServeMux() }

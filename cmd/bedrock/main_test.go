@@ -113,16 +113,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// Until steps 3-4 land, the demo's require_middleware and
-// restrict_concept_to_boundary rules are listed but not evaluated, so the
-// clean demo is INDETERMINATE (exit 2), never PASS.
+// Until step 4 lands, the demo's restrict_concept_to_boundary rule is listed
+// but not evaluated, so the clean demo is INDETERMINATE (exit 2), never PASS;
+// forbid_import and require_middleware (step 3) pass.
 func TestDemoClean(t *testing.T) {
 	code, raw, facts := run(t, "--policy", repoPolicy, "../../demo/clean")
 	r := decode(t, raw)
 	if code != 2 || r.Status != "INDETERMINATE" || len(r.Violations) != 0 {
 		t.Fatalf("clean: exit %d status %s violations %d; want 2 INDETERMINATE 0", code, r.Status, len(r.Violations))
 	}
-	want := map[string]string{"auth-private-import": "PASS", "db-in-repo": "INDETERMINATE", "routes-require-auth": "INDETERMINATE"}
+	want := map[string]string{"auth-private-import": "PASS", "db-in-repo": "INDETERMINATE", "routes-require-auth": "PASS"}
 	if len(r.Rules) != 3 {
 		t.Fatalf("clean rules = %+v, want all 3 configured rules", r.Rules)
 	}
@@ -140,8 +140,8 @@ func TestDemoClean(t *testing.T) {
 			}
 		}
 	}
-	if notEval != 2 {
-		t.Fatalf("rule_not_evaluated diagnostics = %d, want 2", notEval)
+	if notEval != 1 {
+		t.Fatalf("rule_not_evaluated diagnostics = %d, want 1 (restrict_concept_to_boundary)", notEval)
 	}
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }
@@ -152,8 +152,8 @@ func TestDemoViolating(t *testing.T) {
 	if code != 1 || r.Status != "VIOLATION" {
 		t.Fatalf("violating: exit %d status %s; want 1 VIOLATION", code, r.Status)
 	}
-	if len(r.Violations) != 1 {
-		t.Fatalf("violations = %+v, want exactly one", r.Violations)
+	if len(r.Violations) != 2 {
+		t.Fatalf("violations = %+v, want exactly two", r.Violations)
 	}
 	if len(r.Rules) != 3 {
 		t.Fatalf("rules = %+v, want all 3 configured rules listed", r.Rules)
@@ -162,6 +162,14 @@ func TestDemoViolating(t *testing.T) {
 	if v.RuleID != "auth-private-import" || v.RuleKind != "forbid_import" ||
 		v.Location.File != "internal/billing/billing.go" || v.Location.Line != 9 || v.Location.Column != 2 {
 		t.Fatalf("violation = %+v, want auth-private-import at internal/billing/billing.go:9:2", v)
+	}
+	v = r.Violations[1]
+	if v.RuleID != "routes-require-auth" || v.RuleKind != "require_middleware" ||
+		v.Location.File != "internal/server/server.go" || v.Location.Line != 18 {
+		t.Fatalf("violation = %+v, want routes-require-auth at internal/server/server.go:18 (GET /api/v1/admin/users)", v)
+	}
+	if !strings.Contains(string(raw), "route:example.com/demo/internal/server:GET:/api/v1/admin/users#0") {
+		t.Fatalf("the violation must name the GET /api/v1/admin/users route:\n%s", raw)
 	}
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }
@@ -250,15 +258,15 @@ func TestAllRulesUnsupported(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := string(good)
-	src = src[:strings.Index(src, "[[rule]]")] + src[strings.Index(src, "[[rule]]\nid = \"routes-require-auth\""):]
+	src = src[:strings.Index(src, "[[rule]]")] + src[strings.Index(src, "[[rule]]\nid = \"db-in-repo\""):]
 	p := filepath.Join(t.TempDir(), "policy.toml")
 	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, raw, _ := run(t, "--policy", p, "../../demo/clean")
 	r := decode(t, raw)
-	if code != 2 || r.Status != "INDETERMINATE" || len(r.Rules) != 2 {
-		t.Fatalf("exit %d status %s rules %+v; want 2 INDETERMINATE with both rules listed", code, r.Status, r.Rules)
+	if code != 2 || r.Status != "INDETERMINATE" || len(r.Rules) != 1 {
+		t.Fatalf("exit %d status %s rules %+v; want 2 INDETERMINATE with the rule listed", code, r.Status, r.Rules)
 	}
 	for _, ru := range r.Rules {
 		if ru.Status != "INDETERMINATE" {
@@ -619,5 +627,65 @@ func TestExplicitlyImportedUnderscorePackage(t *testing.T) {
 		t.Fatalf("_other/other.go must stay excluded: %v", files)
 	}
 	assertDisjoint(t, raw)
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+}
+
+// Step 3: one direct-wrapper attachment satisfies needs-auth and violates
+// needs-audit; an except_routes entry that matches nothing is a warning and
+// the real unprotected GET /open is still a violation of both rules.
+func TestRouterRulesTwoRules(t *testing.T) {
+	code, raw, facts := run(t, "../../testdata/routerrules")
+	r := decode(t, raw)
+	if code != 1 || r.Status != "VIOLATION" {
+		t.Fatalf("exit %d status %s; want 1 VIOLATION", code, r.Status)
+	}
+	got := map[string]bool{}
+	for _, v := range r.Violations {
+		got[v.RuleID+" "+fmt.Sprint(v.Location.Line)] = true
+	}
+	// server.go: line 25 is GET /export (Auth only), line 32 is GET /open.
+	want := map[string]bool{"needs-audit 25": true, "needs-audit 32": true, "needs-auth 32": true}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("violations %v, want %v", got, want)
+	}
+	unmatched := false
+	for _, d := range r.Diagnostics {
+		if d.Kind == "empty_match" && d.Relevance == "warning" && strings.Contains(string(raw), `GET /nomatch\" matches no governed route`) {
+			unmatched = true
+		}
+		if d.Relevance != "warning" {
+			t.Fatalf("unexpected relevant diagnostic %+v", d)
+		}
+	}
+	if !unmatched {
+		t.Fatalf("unmatched except_routes must be a warning:\n%s", raw)
+	}
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+}
+
+// Every shard emitted for the router fixtures (routes, middleware, closure
+// and wrapper symbols, route diagnostics) passes schemacheck.
+func TestRouterFixtureShardsValidate(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "policy.toml")
+	if err := os.WriteFile(p, []byte(`version = 1
+module = "example.com/routerfixtures"
+[boundary.all]
+packages = ["example.com/routerfixtures/**"]
+[concept."m"]
+symbols = ["example.com/routerfixtures/conditional.M"]
+[[rule]]
+id = "r"
+kind = "require_middleware"
+scope = "all"
+middleware = "m"
+message = "m"
+remediation.message = "m"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, raw, facts := run(t, "--policy", p, "../../testdata/routerfixtures")
+	if code != 1 && code != 2 {
+		t.Fatalf("exit %d", code)
+	}
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }

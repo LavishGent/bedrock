@@ -2,9 +2,9 @@
 // module, evaluate the rules this build supports, and assemble the report
 // (report.schema.json, schema 0.3) and the unit shards.
 //
-// Step 2 evaluates forbid_import only. Every configured rule is listed in
-// rules[]; a rule of a kind this build cannot evaluate (require_middleware,
-// restrict_concept_to_boundary) gets a global rule_not_evaluated diagnostic
+// Step 3 evaluates forbid_import and require_middleware. Every configured
+// rule is listed in rules[]; a rule of a kind this build cannot evaluate
+// (restrict_concept_to_boundary) gets a global rule_not_evaluated diagnostic
 // that makes it INDETERMINATE (schema 0.4), so the run exits 2 unless a real
 // violation gives 1. It never reports PASS for an unchecked rule.
 package check
@@ -38,7 +38,12 @@ type Output struct {
 }
 
 // Evaluated reports whether this build evaluates rules of kind.
-func Evaluated(kind string) bool { return kind == policy.ForbidImport }
+func Evaluated(kind string) bool {
+	return kind == policy.ForbidImport || kind == policy.RequireMiddleware
+}
+
+// loadErrorKinds are the diagnostics of a unit that failed to load.
+var loadErrorKinds = map[string]bool{"package_load_error": true, "parse_or_type_error": true}
 
 func newReport(label string, sum *string) *facts.Report {
 	return &facts.Report{
@@ -96,6 +101,13 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 	}
 
 	res := analyze.Load(ctx, o.Dir)
+	// Policy contract 5: a middleware concept must bind only functions of
+	// type func(http.Handler) http.Handler. This needs types, so it is
+	// checked after loading; a violation is still a policy failure.
+	if msg := middlewareShapeErrors(pol, res); msg != "" {
+		d := facts.NewDiagnostic("policy_invalid", "error", nil, nil, msg, nil)
+		return &Output{Report: PolicyOnly(o.PolicyLabel, pr.SHA256, d, nil)}
+	}
 	r := newReport(o.PolicyLabel, pr.SHA256)
 	for _, id := range sortedIDs(res.Units) {
 		out.Shards = append(out.Shards, res.Units[id].Shard)
@@ -134,11 +146,25 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 		rr := facts.RuleResult{ID: ru.ID, Kind: ru.Kind, ViolationIDs: []string{}, DiagnosticIDs: []string{}}
 		if !Evaluated(ru.Kind) {
 			d := facts.NewDiagnostic("rule_not_evaluated", "error", nil, nil,
-				fmt.Sprintf("rule %q (%s) is not evaluated by this build (bedrock %s evaluates forbid_import only); it cannot pass until it is.", ru.ID, ru.Kind, ToolVersion), nil)
+				fmt.Sprintf("rule %q (%s) is not evaluated by this build (bedrock %s evaluates forbid_import and require_middleware only); it cannot pass until it is.", ru.ID, ru.Kind, ToolVersion), nil)
 			diags = append(diags, facts.ReportDiagnostic{Diagnostic: d, AffectsRules: []facts.AffectedRule{}})
 			affects[d.ID] = append(affects[d.ID], facts.AffectedRule{RuleID: ru.ID, Reason: "not_evaluated"})
 		} else if !res.Fatal {
-			vs, extra, scope := forbidImport(pol, ru, res)
+			var vs []facts.Violation
+			var extra, warnings []facts.Diagnostic
+			var scope map[string]bool
+			if ru.Kind == policy.ForbidImport {
+				vs, extra, scope = forbidImport(pol, ru, res)
+			} else {
+				var routeAffects map[string]string
+				vs, extra, warnings, scope, routeAffects = requireMiddleware(pol, ru, res)
+				for id, reason := range routeAffects {
+					affects[id] = append(affects[id], facts.AffectedRule{RuleID: ru.ID, Reason: reason})
+				}
+			}
+			for _, d := range warnings { // unmatched except_routes: listed only
+				diags = append(diags, facts.ReportDiagnostic{Diagnostic: d, Relevance: "warning", AffectsRules: []facts.AffectedRule{}})
+			}
 			r.Violations = append(r.Violations, vs...)
 			for _, v := range vs {
 				rr.ViolationIDs = append(rr.ViolationIDs, v.ID)
@@ -150,7 +176,7 @@ func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 			}
 			// A governed unit that failed to load or type-check (plan section 7).
 			for _, d := range diags {
-				if d.Scope == "unit" && d.Severity == "error" && scope[*d.UnitID] {
+				if d.Scope == "unit" && loadErrorKinds[d.Kind] && scope[*d.UnitID] {
 					affects[d.ID] = append(affects[d.ID], facts.AffectedRule{RuleID: ru.ID, Reason: "unit_in_scope"})
 				}
 			}

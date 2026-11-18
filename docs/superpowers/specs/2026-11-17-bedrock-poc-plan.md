@@ -132,6 +132,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
    *Delivered:* `cmd/bedrock`, `internal/{analyze,policy,glob,check,facts}`. Evidence in `step2/2026-11-17-step2-evidence.md`. Rules of kinds this build does not evaluate (`require_middleware`, `restrict_concept_to_boundary`) stay listed and are `INDETERMINATE` through `rule_not_evaluated` (schema 0.4; fail closed, owner decision 2026-11-18), so `demo/clean` exits 2 until steps 3 and 4.
 3. Route and middleware extraction per the support matrix. `require_middleware`.
+   *Delivered:* `internal/analyze/routes.go`, `internal/check/middleware.go`, route and `route_middleware` facts in shards (schema unchanged, 0.4), chi direct methods supported (coordinator decision). Evidence in `step3/2026-11-18-step3-evidence.md`.
 4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
 5. Hook and CI examples, plus the by-hand agent demo.
 

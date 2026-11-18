@@ -1,0 +1,29 @@
+# Step 3 fixture: two require_middleware rules over the same routes.
+version = 1
+module = "example.com/routerrules"
+
+[boundary.routes]
+packages = ["example.com/routerrules/server"]
+
+[concept."auth.middleware"]
+symbols = ["example.com/routerrules/server.Auth"]
+
+[concept."audit.middleware"]
+symbols = ["example.com/routerrules/server.Audit"]
+
+[[rule]]
+id = "needs-audit"
+kind = "require_middleware"
+scope = "routes"
+middleware = "audit.middleware"
+message = "Every route must be audited."
+remediation.message = "Wrap the handler with server.Audit."
+
+[[rule]]
+id = "needs-auth"
+kind = "require_middleware"
+scope = "routes"
+middleware = "auth.middleware"
+except_routes = ["GET /nomatch"]
+message = "Every route must be authenticated."
+remediation.message = "Wrap the handler with server.Auth."

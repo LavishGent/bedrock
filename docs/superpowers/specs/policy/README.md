@@ -91,7 +91,7 @@ Route sets are not boundaries in version 1. Routes are scoped by projecting a pa
 - At least one of `packs` and `symbols` must be non-empty.
 - **Concept set**: the union of the pack bindings and `symbols`, restricted to function symbols present in the analysis universe.
 - **Wrapper closure**: a call whose target is a wrapper or instance of a bound symbol counts as a call to that symbol. This covers `$bound`, `$thunk`, pointer and promotion wrappers, and generic instances whose `origin_id` is bound. Without this, `f := db.QueryContext; f(...)`, or a struct embedding `*sql.DB`, would slip through. Call sites inside such a wrapper are not reported a second time; the call into the wrapper is the reported site.
-- **Middleware concepts**: a concept used as a middleware (`require_middleware.middleware`) must bind only functions of type `func(http.Handler) http.Handler`. Any other signature is `policy_invalid`.
+- **Middleware concepts**: a concept used as a middleware (`require_middleware.middleware`) must bind only functions of type `func(http.Handler) http.Handler`, and no packs. Any other signature, or a pack, is `policy_invalid`. This is checked after loading, because it needs types; the report is then a policy failure with `rules: []`.
 
 ### 5.1 Pack `go-stdlib-sql`, concept `database.query`, for go1.26.11
 
