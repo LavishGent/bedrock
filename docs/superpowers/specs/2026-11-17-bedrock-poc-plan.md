@@ -138,8 +138,8 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
    *Delivered:* `internal/analyze/callgraph.go` (SSA with instantiated generics, CHA seeding VTA, call sites, universe symbols, unknown-call diagnostics, analysis manifest), `internal/check/boundary.go` (shard merge checks, Entry recomputed once from the merged graph, `reachable_from`, decision A relevance with assumption counts). `restrict_concept_to_boundary` is evaluated, so it no longer gets `rule_not_evaluated`, and `demo/clean` exits 0. Fixtures are in `testdata/step4`. The schema is unchanged at 0.4; symbol ID clarifications are in `schema/README.md`. Evidence in `step4/2026-11-18-step4-evidence.md`.
 5. Hook and CI examples, plus the by-hand agent demo.
    *Delivered:* `docs/integration/`, containing:
-   - Claude Code, Cursor and git pre-commit hook examples around a shared runner;
-   - a GitHub Actions example implementing section 9, which is not enabled;
+   - git pre-commit (authoritative), Claude Code and Cursor (repair aids) hook examples around a shared runner;
+   - a GitHub Actions example implementing section 9 as a base-branch `pull_request_target` workflow, which is not enabled;
    - the by-hand agent demo kit: `agent-demo/prepare.sh`, the prompt and a checklist.
 
    Also a root `README.md`. The agent demo itself is run by a human. Evidence in `step5/2026-11-18-step5-evidence.md`.
@@ -151,7 +151,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 The POC keeps the parent spec's protections (invariant 2 and the CI section):
 
 - CODEOWNERS covers `.bedrock/**`, `packs/**`, the CI workflow and the approved middleware implementation.
-- CI loads policy and bindings from the base branch, never from the PR.
+- CI loads policy and bindings from the base branch, never from the PR. The CI workflow definition itself, which holds the binary pin, the Go pin and the policy selection, also runs from the base branch. On GitHub that means `pull_request_target`, which checks out the PR head only as analysis input and never executes it. A `pull_request` workflow would run the PR's own copy of those pins (`docs/integration/github-actions/bedrock.yml`).
 - The `bedrock` binary comes from a pinned, checksummed release, never from the PR. Go toolchain and dependency versions are pinned, and the package driver and build environment are controlled.
 - Bedrock checks only that approved middleware is structurally attached. Replacing `RequireAuth` with a no-op wrapper keeps the facts unchanged, so an auth behavior test in the demo must fail on a no-op wrapper, and the middleware implementation is protected by CODEOWNERS.
 

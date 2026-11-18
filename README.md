@@ -42,7 +42,7 @@ Example, on the demo service:
 | --- | --- | --- |
 | 0 | `PASS` | Every rule passed. |
 | 1 | `VIOLATION` | At least one violation. A violation wins over any uncertainty, and all diagnostics are still listed. |
-| 2 | `INDETERMINATE` | Bedrock could not decide. Causes include a missing or invalid policy, a governed package that does not load, an unsupported router or middleware form, reflection, `unsafe` or bodyless calls the rules depend on, or an analyzer crash, timeout or memory limit. **Exit 2 means uncertainty, not a pass.** Hooks and CI must treat it as blocking. |
+| 2 | `INDETERMINATE` | Bedrock could not decide. Causes include a missing or invalid policy, a governed package that does not load, an unsupported router or middleware form, reflection, `unsafe` or bodyless calls the rules depend on, or an analyzer crash, timeout or memory limit. **Exit 2 means uncertainty, not a pass.** The git hook and CI treat it as a failure, exactly like exit 1. |
 
 The JSON report is described by `docs/superpowers/specs/schema/` (schema 0.4). Each violation carries a location, an evidence chain and the policy's remediation. Each diagnostic carries its relevance (`global`, `indeterminate` or `warning`) and the rules it affects.
 
@@ -54,7 +54,10 @@ The JSON report is described by `docs/superpowers/specs/schema/` (schema 0.4). E
   - `forbid_import`: package import restrictions.
   - `require_middleware`: every governed route has the approved middleware in its effective chain. It covers a bounded subset of `chi` v5 and `net/http`, in the supported router form (`docs/superpowers/specs/routers/README.md`).
   - `restrict_concept_to_boundary`: calls bound to a concept, for example the 26 `database/sql` query, exec and prepare methods of pack `go-stdlib-sql`, may only be reached through the approved boundary. It uses SSA with CHA-seeded VTA over the whole program and `reachable_from` from the graph-derived `Entry` set.
-- **Integration examples.** Claude Code, Cursor and git hooks, a GitHub Actions workflow and the by-hand agent demo kit live in `docs/integration/`.
+- **Integration examples** live in `docs/integration/`:
+  - a git pre-commit hook and a `pull_request_target` GitHub Actions workflow, which are the **authoritative** gates;
+  - Claude Code and Cursor hooks, which are repair aids that feed findings back to the agent;
+  - the by-hand agent demo kit.
 
 ## Known limits
 
