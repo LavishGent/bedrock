@@ -1,0 +1,127 @@
+{
+  "schema_version": "0.4",
+  "kind": "report",
+  "tool": {
+    "name": "bedrock",
+    "version": "0.0.0-poc"
+  },
+  "status": "INDETERMINATE",
+  "exit_code": 2,
+  "build_profile": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo_enabled": false,
+    "tags": [],
+    "go_version": "go1.26.11",
+    "x_tools_version": "v0.52.0"
+  },
+  "policy": {
+    "path": ".bedrock/policy.toml",
+    "sha256": "sha256:0ac866ccd35cbdbbd53efd377056022db1a646cdda8e3a166fcd25fe6862b9de"
+  },
+  "inputs": {
+    "manifest_sha256": null,
+    "shard_count": 198
+  },
+  "assumptions": [],
+  "summary": {
+    "violations": 0,
+    "indeterminate_diagnostics": 2,
+    "global_diagnostics": 0,
+    "warning_diagnostics": 0,
+    "units_analyzed": 7,
+    "rules": 3
+  },
+  "packages": {
+    "included": [
+      "example.com/demo/cmd/demo",
+      "example.com/demo/internal/auth",
+      "example.com/demo/internal/auth/private",
+      "example.com/demo/internal/billing",
+      "example.com/demo/internal/handler",
+      "example.com/demo/internal/repo",
+      "example.com/demo/internal/server"
+    ],
+    "excluded": [],
+    "excluded_files": [
+      {
+        "path": "internal/auth/auth_test.go",
+        "reason": "test_file"
+      },
+      {
+        "path": "internal/server/server_test.go",
+        "reason": "test_file"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "id": "auth-private-import",
+      "kind": "forbid_import",
+      "status": "PASS",
+      "violation_ids": [],
+      "diagnostic_ids": []
+    },
+    {
+      "id": "db-in-repo",
+      "kind": "restrict_concept_to_boundary",
+      "status": "INDETERMINATE",
+      "violation_ids": [],
+      "diagnostic_ids": [
+        "diag:f19b14d019702414"
+      ]
+    },
+    {
+      "id": "routes-require-auth",
+      "kind": "require_middleware",
+      "status": "INDETERMINATE",
+      "violation_ids": [],
+      "diagnostic_ids": [
+        "diag:dc6fe566459a6768"
+      ]
+    }
+  ],
+  "violations": [],
+  "diagnostics": [
+    {
+      "id": "diag:dc6fe566459a6768",
+      "kind": "rule_not_evaluated",
+      "severity": "error",
+      "scope": "global",
+      "unit_id": null,
+      "symbol_id": null,
+      "site_id": null,
+      "message": "rule \"routes-require-auth\" (require_middleware) is not evaluated by this build (bedrock 0.0.0-poc evaluates forbid_import only); it cannot pass until it is.",
+      "loc": null,
+      "relevance": "indeterminate",
+      "affects_rules": [
+        {
+          "rule_id": "routes-require-auth",
+          "reason": "unit_in_scope"
+        }
+      ],
+      "exempted_by": null,
+      "unit_origin": null
+    },
+    {
+      "id": "diag:f19b14d019702414",
+      "kind": "rule_not_evaluated",
+      "severity": "error",
+      "scope": "global",
+      "unit_id": null,
+      "symbol_id": null,
+      "site_id": null,
+      "message": "rule \"db-in-repo\" (restrict_concept_to_boundary) is not evaluated by this build (bedrock 0.0.0-poc evaluates forbid_import only); it cannot pass until it is.",
+      "loc": null,
+      "relevance": "indeterminate",
+      "affects_rules": [
+        {
+          "rule_id": "db-in-repo",
+          "reason": "not_evaluated"
+        }
+      ],
+      "exempted_by": null,
+      "unit_origin": null
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bedrock.invalid/poc/0.4/analysis.schema.json",
+  "title": "Bedrock POC analysis manifest",
+  "description": "One per analyzer run. Names the shard set that forms the run (so the evaluator can check completeness), carries global diagnostics, and records the analysis universe and the Entry digest. Rules: README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "analyzer",
+    "status",
+    "build_profile",
+    "build_profile_digest",
+    "module",
+    "patterns",
+    "limits",
+    "universe",
+    "units",
+    "excluded_packages",
+    "entry",
+    "global_diagnostics"
+  ],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "kind": {
+      "const": "analysis_manifest"
+    },
+    "analyzer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "bedrock-analyzer-go"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "status": {
+      "description": "complete only when every unit has a shard and no global error occurred. Any other value makes every rule INDETERMINATE unless a violation exists.",
+      "enum": [
+        "complete",
+        "load_error",
+        "timeout",
+        "memory_limit",
+        "crash"
+      ]
+    },
+    "build_profile": {
+      "$ref": "common.schema.json#/$defs/buildProfile"
+    },
+    "build_profile_digest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "dir"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "description": "Module root relative to the repository root ('.' for the root).",
+          "type": "string"
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeout_seconds",
+        "memory_mib"
+      ],
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memory_mib": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "bodyless_policy",
+        "function_count",
+        "bodyless_count"
+      ],
+      "properties": {
+        "definition": {
+          "const": "all_functions_transitive_closure_v1"
+        },
+        "bodyless_policy": {
+          "const": "leaf_with_diagnostic_v1"
+        },
+        "function_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bodyless_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "units": {
+      "description": "Every unit in the run, module and external alike. Sorted by id, unique. Exactly one shard per entry.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "origin",
+          "content_hash",
+          "shard"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/unitId"
+          },
+          "origin": {
+            "enum": [
+              "module",
+              "dependency",
+              "stdlib",
+              "unresolved"
+            ]
+          },
+          "content_hash": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          },
+          "shard": {
+            "description": "sha256 of the shard file's canonical JSON.",
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      }
+    },
+    "excluded_packages": {
+      "description": "Packages matched by the patterns but not analyzed. Sorted by id.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "build_constraint",
+              "test_only",
+              "outside_module",
+              "ignored_by_go",
+              "load_error"
+            ]
+          }
+        }
+      }
+    },
+    "entry": {
+      "description": "The analyzer's own Entry derivation, so the evaluator can check that it recovers the same set from shards alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "digest"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "sha256 over the sorted Entry symbol IDs, each followed by LF.",
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    },
+    "global_diagnostics": {
+      "description": "Sorted by id.",
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "common.schema.json#/$defs/diagnostic"
+          },
+          {
+            "properties": {
+              "scope": {
+                "const": "global"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

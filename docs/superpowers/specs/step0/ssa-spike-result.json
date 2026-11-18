@@ -1,0 +1,353 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "toolchain": {
+    "go_pinned": "go1.26.11",
+    "go_runtime": "go1.26.11",
+    "x_tools_linked": "v0.52.0",
+    "x_tools_pinned": "v0.52.0"
+  },
+  "build_profile": {
+    "CGO_ENABLED": "0",
+    "GOARCH": "amd64",
+    "GOFLAGS": "-mod=readonly",
+    "GOOS": "linux",
+    "GOTOOLCHAIN": "local",
+    "GOWORK": "off",
+    "tags": ""
+  },
+  "limits": {
+    "mem_limit_mib": "4096",
+    "timeout": "2m0s"
+  },
+  "target": "spike/target",
+  "patterns": [
+    "./..."
+  ],
+  "phases": [
+    {
+      "name": "load",
+      "wall_seconds": 0.355,
+      "heap_live_mib_after": 269.278,
+      "go_runtime_total_mib_after": 394.534
+    },
+    {
+      "name": "ssa",
+      "wall_seconds": 0.083,
+      "heap_live_mib_after": 510.663,
+      "go_runtime_total_mib_after": 593.262
+    },
+    {
+      "name": "universe",
+      "wall_seconds": 0.031,
+      "heap_live_mib_after": 534.276,
+      "go_runtime_total_mib_after": 593.825
+    },
+    {
+      "name": "cha",
+      "wall_seconds": 0.052,
+      "heap_live_mib_after": 561.83,
+      "go_runtime_total_mib_after": 618.637
+    },
+    {
+      "name": "vta",
+      "wall_seconds": 0.228,
+      "heap_live_mib_after": 641.201,
+      "go_runtime_total_mib_after": 696.82
+    },
+    {
+      "name": "classify",
+      "wall_seconds": 0.2,
+      "heap_live_mib_after": 601.953,
+      "go_runtime_total_mib_after": 745.398
+    }
+  ],
+  "total_wall_seconds": 0.961,
+  "peak_go_runtime_total_mib": 745.398,
+  "max_rss_mib": 738.516,
+  "universe": {
+    "bodyless_by_origin": {
+      "stdlib": 549
+    },
+    "call_sites_non_builtin": 55761,
+    "definition": "ssautil.AllFunctions over SSA built (InstantiateGenerics) from every package in the transitive import closure of the target patterns, loaded with full syntax; tests excluded",
+    "functions_by_origin": {
+      "dependency": {
+        "closure": 8,
+        "func": 17,
+        "method": 61,
+        "wrapper": 12
+      },
+      "module": {
+        "func": 2,
+        "method": 2,
+        "wrapper": 4
+      },
+      "stdlib": {
+        "closure": 1123,
+        "func": 6515,
+        "instance": 943,
+        "method": 5715,
+        "wrapper": 2560
+      },
+      "synthetic": {
+        "wrapper": 4
+      }
+    },
+    "functions_total": 16966,
+    "generic_origins_in_universe": 250,
+    "go_files_by_origin": {
+      "dependency": 5,
+      "module": 3,
+      "stdlib": 1090
+    },
+    "id_collision_groups": {
+      "by_kind": {
+        "instance+method/differing": 11,
+        "instance/equivalent": 38,
+        "wrapper/differing": 1,
+        "wrapper/equivalent": 19
+      },
+      "differing": 12,
+      "equivalent": 57,
+      "total": 69
+    },
+    "instances_with_type_param_args": 187,
+    "module_functions": [
+      "(*example.com/spike/internal/handler.Items).Create [method]",
+      "(*example.com/spike/internal/handler.Items).Create$bound [wrapper]",
+      "(*example.com/spike/internal/repo.Store).SaveItem [method]",
+      "example.com/spike/cmd/server.init [wrapper]",
+      "example.com/spike/cmd/server.main [func]",
+      "example.com/spike/internal/handler.init [wrapper]",
+      "example.com/spike/internal/repo.New [func]",
+      "example.com/spike/internal/repo.init [wrapper]"
+    ],
+    "synthetic_without_package": [
+      "(*net/http.nothingWrittenError).Error (wrapper for func (error).Error() string)",
+      "(*net/http.requestBodyReadError).Error (wrapper for func (error).Error() string)",
+      "(net/http.nothingWrittenError).Error (wrapper for func (error).Error() string)",
+      "(net/http.requestBodyReadError).Error (wrapper for func (error).Error() string)"
+    ],
+    "units_by_origin": {
+      "dependency": 1,
+      "module": 3,
+      "stdlib": 188,
+      "synthetic": 1
+    }
+  },
+  "graphs": {
+    "cha_edges": 253397,
+    "cha_nodes": 16967,
+    "vta_edges": 64189,
+    "vta_nodes": 16966,
+    "vta_sites_with_multiple_targets": 1347
+  },
+  "diagnostics": {
+    "by_kind_and_origin": {
+      "bodyless_function": {
+        "stdlib": 2408
+      },
+      "reflection_call": {
+        "stdlib": 13
+      },
+      "unresolved_dynamic_call": {
+        "dependency": 6,
+        "stdlib": 283
+      },
+      "unresolved_interface_call": {
+        "stdlib": 371
+      },
+      "unsafe_pointer": {
+        "stdlib": 1335
+      }
+    },
+    "non_stdlib_by_unit": {
+      "github.com/go-chi/chi/v5": 6
+    },
+    "non_stdlib_samples": {
+      "dependency/unresolved_dynamic_call": [
+        "(*github.com/go-chi/chi/v5.Mux).Group -\u003e func(r github.com/go-chi/chi/v5.Router) @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/mux.go:271:5",
+        "(*github.com/go-chi/chi/v5.Mux).Route -\u003e func(r github.com/go-chi/chi/v5.Router) @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/mux.go:283:4",
+        "github.com/go-chi/chi/v5.chain -\u003e func(net/http.Handler) net/http.Handler @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/chain.go:43:38",
+        "github.com/go-chi/chi/v5.chain -\u003e func(net/http.Handler) net/http.Handler @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/chain.go:45:21",
+        "github.com/go-chi/chi/v5.walk -\u003e github.com/go-chi/chi/v5.WalkFunc @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/tree.go:913:21",
+        "github.com/go-chi/chi/v5.walk -\u003e github.com/go-chi/chi/v5.WalkFunc @ \u003cmodcache\u003e/github.com/go-chi/chi/v5@v5.5.0/tree.go:917:21"
+      ]
+    },
+    "top_units": [
+      "runtime: 2186",
+      "reflect: 288",
+      "sync/atomic: 206",
+      "syscall: 196",
+      "internal/runtime/maps: 164",
+      "crypto/internal/fips140/nistec: 132",
+      "net/http: 95",
+      "net: 85",
+      "internal/runtime/atomic: 67",
+      "database/sql: 54",
+      "sync: 52",
+      "encoding/binary: 49",
+      "internal/abi: 42",
+      "internal/sync: 40",
+      "internal/poll: 38"
+    ],
+    "total": 4416
+  },
+  "entry": {
+    "definition": "universe functions with zero incoming VTA edges, plus chi route handlers",
+    "module_no_incoming": [
+      "example.com/spike/cmd/server.init",
+      "example.com/spike/cmd/server.main"
+    ],
+    "no_incoming_by_origin": {
+      "dependency": 29,
+      "module": 2,
+      "stdlib": 4566,
+      "synthetic": 2
+    },
+    "no_incoming_total": 4599,
+    "route_handlers": [
+      "(*example.com/spike/internal/handler.Items).Create$bound"
+    ]
+  },
+  "reachability_from_module": {
+    "diagnostics_reachable_per_module_fn": {
+      "(*example.com/spike/internal/handler.Items).Create": 1844,
+      "(*example.com/spike/internal/handler.Items).Create$bound": 1844,
+      "(*example.com/spike/internal/repo.Store).SaveItem": 1841,
+      "example.com/spike/cmd/server.init": 1833,
+      "example.com/spike/cmd/server.main": 1919,
+      "example.com/spike/internal/handler.init": 1833,
+      "example.com/spike/internal/repo.New": 0,
+      "example.com/spike/internal/repo.init": 1815
+    },
+    "from_all_module_functions": {
+      "by_kind_and_origin": {
+        "bodyless_function": {
+          "stdlib": 1210
+        },
+        "unresolved_dynamic_call": {
+          "dependency": 2,
+          "stdlib": 95
+        },
+        "unresolved_interface_call": {
+          "stdlib": 85
+        },
+        "unsafe_pointer": {
+          "stdlib": 562
+        }
+      },
+      "reachable_by_origin": {
+        "dependency": 45,
+        "module": 8,
+        "stdlib": 7570,
+        "synthetic": 2
+      },
+      "reachable_functions": 7625,
+      "unknown_call_diagnostics_reachable": 1954
+    },
+    "from_each_route_handler": {
+      "(*example.com/spike/internal/handler.Items).Create$bound": {
+        "by_kind_and_origin": {
+          "bodyless_function": {
+            "stdlib": 1166
+          },
+          "unresolved_dynamic_call": {
+            "stdlib": 65
+          },
+          "unresolved_interface_call": {
+            "stdlib": 75
+          },
+          "unsafe_pointer": {
+            "stdlib": 538
+          }
+        },
+        "reachable_by_origin": {
+          "dependency": 5,
+          "module": 3,
+          "stdlib": 6303,
+          "synthetic": 2
+        },
+        "reachable_functions": 6313,
+        "unknown_call_diagnostics_reachable": 1844
+      }
+    },
+    "module_functions_reachable_from_non_module_entries": {
+      "(*example.com/spike/internal/handler.Items).Create": "(*net/http.serverHandler).ServeHTTP -\u003e (net/http.serverHandler).ServeHTTP -\u003e (*github.com/go-chi/chi/v5.Mux).ServeHTTP -\u003e (net/http.HandlerFunc).ServeHTTP -\u003e (*example.com/spike/internal/handler.Items).Create$bound -\u003e (*example.com/spike/internal/handler.Items).Create",
+      "(*example.com/spike/internal/handler.Items).Create$bound": "(*net/http.serverHandler).ServeHTTP -\u003e (net/http.serverHandler).ServeHTTP -\u003e (*github.com/go-chi/chi/v5.Mux).ServeHTTP -\u003e (net/http.HandlerFunc).ServeHTTP -\u003e (*example.com/spike/internal/handler.Items).Create$bound",
+      "(*example.com/spike/internal/repo.Store).SaveItem": "(*net/http.serverHandler).ServeHTTP -\u003e (net/http.serverHandler).ServeHTTP -\u003e (*github.com/go-chi/chi/v5.Mux).ServeHTTP -\u003e (net/http.HandlerFunc).ServeHTTP -\u003e (*example.com/spike/internal/handler.Items).Create$bound -\u003e (*example.com/spike/internal/handler.Items).Create -\u003e (*example.com/spike/internal/repo.Store).SaveItem"
+    }
+  },
+  "symbol_id_collisions": [
+    "(*compress/flate.compressor).fillStore$thunk (x3, wrapper equivalent)",
+    "(*compress/flate.decompressor).huffmanBlock$thunk (x2, wrapper equivalent)",
+    "(*compress/flate.decompressor).nextBlock$thunk (x4, wrapper equivalent)",
+    "(*crypto/tls.cipherSuiteTLS13).finishedHash$bound (x2, wrapper equivalent)",
+    "(*crypto/tls.serverHandshakeState).cipherSuiteOk$bound (x2, wrapper equivalent)",
+    "(*database/sql.driverConn).releaseConn$bound (x7, wrapper equivalent)",
+    "(*github.com/go-chi/chi/v5.Mux).routeHTTP$bound (x2, wrapper equivalent)",
+    "(*net.ipStackCapabilities).probe$bound (x3, wrapper equivalent)",
+    "(*net/http.Transport).onceSetNextProtoDefaults$bound (x4, wrapper equivalent)",
+    "(*net/http.http2serverConn).processSetting$bound (x2, wrapper equivalent)",
+    "(*net/http.http2stream).onReadTimeout$bound (x2, wrapper equivalent)",
+    "(*net/http.http2stream).onWriteTimeout$bound (x2, wrapper equivalent)",
+    "(*os.File).Read$bound (x3, wrapper equivalent)",
+    "(*strings.Replacer).buildOnce$bound (x2, wrapper equivalent)",
+    "(*sync/atomic.Pointer[unique.entry[T]]).Load (x3, instance equivalent)",
+    "(*sync/atomic.Pointer[unique.entry[T]]).Store (x2, instance equivalent)",
+    "(*sync/atomic.Pointer[unique.indirect[T]]).Load (x3, instance equivalent)",
+    "(*sync/atomic.Pointer[unique.node[T]]).Load (x4, instance equivalent)",
+    "(*sync/atomic.Pointer[unique.node[T]]).Store (x3, instance equivalent)",
+    "(*unique.canonMap[T]).Load (x2, instance+method differing)",
+    "(*unique.canonMap[T]).LoadOrStore (x2, instance+method differing)",
+    "(*unique.canonMap[T]).cleanup (x2, instance+method differing)",
+    "(*unique.canonMap[T]).expand (x2, instance+method differing)",
+    "(*unique.entry[T]).hasWeakPointer (x2, instance+method differing)",
+    "(*unique.entry[T]).lookup (x3, instance+method differing)",
+    "(*unique.entry[T]).prune (x3, instance+method differing)",
+    "(*unique.indirect[T]).empty (x2, instance+method differing)",
+    "(*unique.node[T]).entry (x4, instance+method differing)",
+    "(*unique.node[T]).indirect (x4, instance+method differing)",
+    "(crypto.Hash).New$bound (x21, wrapper equivalent)",
+    "(database/sql.ccChecker).CheckNamedValue$bound (x2, wrapper equivalent)",
+    "(net/http.Handler).ServeHTTP$bound (x5, wrapper differing)",
+    "(unicode.SpecialCase).ToLower$bound (x2, wrapper equivalent)",
+    "(unicode.SpecialCase).ToTitle$bound (x2, wrapper equivalent)",
+    "(unicode.SpecialCase).ToUpper$bound (x2, wrapper equivalent)",
+    "(weak.Pointer[T]).Value (x3, instance+method differing)",
+    "cmp.Less[E] (x10, instance equivalent)",
+    "cmp.isNaN[T] (x2, instance equivalent)",
+    "crypto/ecdsa.privateKeyToFIPS[P] (x3, instance equivalent)",
+    "crypto/ecdsa.publicKeyToFIPS[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.NewPrivateKey[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.NewPublicKey[P] (x3, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.Verify[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.bits2octets[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.hashToNat[P] (x3, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.inverse[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.newDRBG[H] (x3, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.randomPoint[P] (x2, instance equivalent)",
+    "crypto/internal/fips140/ecdsa.sign[P] (x3, instance equivalent)",
+    "crypto/internal/fips140/hkdf.Expand[H] (x2, instance equivalent)",
+    "crypto/internal/fips140/hkdf.Extract[H] (x2, instance equivalent)",
+    "crypto/internal/fips140/hmac.New[H] (x4, instance equivalent)",
+    "crypto/internal/fips140hash.UnwrapNew[H] (x2, instance equivalent)",
+    "errors.asType[E] (x2, instance equivalent)",
+    "internal/abi.Escape[*T] (x3, instance equivalent)",
+    "internal/abi.TypeFor[T] (x4, instance equivalent)",
+    "slices.Collect[E] (x3, instance equivalent)",
+    "slices.IndexFunc[S, E] (x2, instance equivalent)",
+    "slices.insertionSortCmpFunc[E] (x2, instance equivalent)",
+    "slices.insertionSortOrdered[E] (x2, instance equivalent)",
+    "slices.medianCmpFunc[E] (x2, instance equivalent)",
+    "slices.medianOrdered[E] (x2, instance equivalent)",
+    "slices.overlaps[E] (x2, instance equivalent)",
+    "slices.pdqsortCmpFunc[E] (x2, instance equivalent)",
+    "slices.pdqsortOrdered[E] (x2, instance equivalent)",
+    "slices.rotateRight[E] (x2, instance equivalent)",
+    "slices.symMergeCmpFunc[E] (x2, instance equivalent)",
+    "slices.symMergeOrdered[E] (x2, instance equivalent)",
+    "unique.newIndirectNode[T] (x2, instance equivalent)"
+  ]
+}

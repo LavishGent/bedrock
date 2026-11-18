@@ -1,0 +1,1231 @@
+{
+  "schema_version": "0.4",
+  "kind": "analysis_manifest",
+  "analyzer": {
+    "name": "bedrock-analyzer-go",
+    "version": "0.0.0-poc"
+  },
+  "status": "complete",
+  "build_profile": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo_enabled": false,
+    "tags": [],
+    "go_version": "go1.26.11",
+    "x_tools_version": "v0.52.0"
+  },
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "module": {
+    "path": "example.com/demo",
+    "dir": "."
+  },
+  "patterns": [
+    "./..."
+  ],
+  "limits": {
+    "timeout_seconds": 120,
+    "memory_mib": 4096
+  },
+  "universe": {
+    "definition": "all_functions_transitive_closure_v1",
+    "bodyless_policy": "leaf_with_diagnostic_v1",
+    "function_count": 17205,
+    "bodyless_count": 549
+  },
+  "units": [
+    {
+      "id": "bufio",
+      "origin": "stdlib",
+      "content_hash": "sha256:75f0e6f2afc9a55de7587e1ca3aed390f0402f9c6327f8e0949f274349a4cd4f",
+      "shard": "sha256:e1b1a6009fcf550e436c4521945a7a2f5e8023afc365554be25f60bf3945def6"
+    },
+    {
+      "id": "bytes",
+      "origin": "stdlib",
+      "content_hash": "sha256:2968078dc1728dccaee29e580e8576a92f511811ac17f6e6b654c38ebb918615",
+      "shard": "sha256:e56e29bb76db36dcc7446218c4bd50b25fa9d0b41dccc4ee0987fba98ba19952"
+    },
+    {
+      "id": "cmp",
+      "origin": "stdlib",
+      "content_hash": "sha256:80a015b0fe71cd144349982afab22f446e8bf40c3d3bb2f976775f7b187c675c",
+      "shard": "sha256:bc512d72a36af0aef9ef5f2f65451b5273277a1f6e950a5c8aaf2dfb6751d6be"
+    },
+    {
+      "id": "compress/flate",
+      "origin": "stdlib",
+      "content_hash": "sha256:160cab08f26b50dd81680a398db10de989e74e56c2d3d30db971936dcee5b279",
+      "shard": "sha256:2aa000df6a8e333ff7531ac18b13283695e60e5bfddb9ad67b183a42e5321753"
+    },
+    {
+      "id": "compress/gzip",
+      "origin": "stdlib",
+      "content_hash": "sha256:00f50896c484ee8e9c3f3adf463e20609a475f5cde30ce6aa434913e6f0a8974",
+      "shard": "sha256:f68b833a630195d109eaf7f5ff76fcf10d51c7455664fb9990238349862cf0b8"
+    },
+    {
+      "id": "container/list",
+      "origin": "stdlib",
+      "content_hash": "sha256:961e29dc76836bdbf3fbadc79c266185e1f7d3fe69c3e97efaa4fe434db01d25",
+      "shard": "sha256:2cd60b4a07ed789caa5e0cef24d8dbc8a7346395991662d0116b79af23eda7e7"
+    },
+    {
+      "id": "context",
+      "origin": "stdlib",
+      "content_hash": "sha256:8f937805b4d2ecdbcbcc01b0820fe1ecd374c87d4b96e754f9b8b247093d2893",
+      "shard": "sha256:107e2dd32f5815c3091a605be04fd037609b4f712ffae364cf7f07b90bdc77f2"
+    },
+    {
+      "id": "crypto",
+      "origin": "stdlib",
+      "content_hash": "sha256:cd42b2a02af8c733c9151a79d36d15888170d28853bdd9f6b4e9da12b5e14de4",
+      "shard": "sha256:311d7faa65b186b6fed53a983cac98968b8c163c231c287c45c4980289637217"
+    },
+    {
+      "id": "crypto/aes",
+      "origin": "stdlib",
+      "content_hash": "sha256:fc60a6858df005def4328b8ef3495d1e2a0a82e5a75fe07723956c2d66898808",
+      "shard": "sha256:76c75d4ae92aace0234546f33a9ea5d714bbe19f85b0f546f819c2b07d944088"
+    },
+    {
+      "id": "crypto/cipher",
+      "origin": "stdlib",
+      "content_hash": "sha256:ebb9406625a30856dad0d7cef60db158a870e8b48c3ac5fe754bc0a7f8332981",
+      "shard": "sha256:bda0def7e6aacf133ffa8a5ae51bd4b75f22881acc09712b4abf44be9890150c"
+    },
+    {
+      "id": "crypto/des",
+      "origin": "stdlib",
+      "content_hash": "sha256:19a4f7ec5f3f777ee1262607d6867385fbd0f19b2e4c7c9447b8546142a00f4c",
+      "shard": "sha256:87c64f120b8233cd05638cfecb5222ebb5891ece744ef10877666c062ecba7f6"
+    },
+    {
+      "id": "crypto/dsa",
+      "origin": "stdlib",
+      "content_hash": "sha256:9268df13b6f2cae38b934f4ccd74f560941aa3d2c33d7a0e04f58c8c7d398f7c",
+      "shard": "sha256:ac6a50324d926bc0431023f11ef1d18ca55ede473d911d1158ceb9719e4dbc37"
+    },
+    {
+      "id": "crypto/ecdh",
+      "origin": "stdlib",
+      "content_hash": "sha256:fde73f44bb5c50385dc364b929d6372ad11842662fba4ee30b57a47dacc39028",
+      "shard": "sha256:6f4fa0baee831813644b5ec6e11b4d1142ed0c8529db811c0473e20a66e90e5a"
+    },
+    {
+      "id": "crypto/ecdsa",
+      "origin": "stdlib",
+      "content_hash": "sha256:ff17e2c9623fdf0d5c60b3200bb564cde32d65fcbf119c99d9eac6b6dde5b678",
+      "shard": "sha256:86d4de7e6a9d0db79a6eb7fa1a337afd94bfe3c4daf01ffd46ffc5eaf8a15339"
+    },
+    {
+      "id": "crypto/ed25519",
+      "origin": "stdlib",
+      "content_hash": "sha256:61906b7762d76e6369a949816832afa78dd0d9ed90967fd4281ca1f9ad6949f2",
+      "shard": "sha256:f6a9bfadb6ec118bf224eb996d49200a23f5c9312e9cbcbb3673e820520ee543"
+    },
+    {
+      "id": "crypto/elliptic",
+      "origin": "stdlib",
+      "content_hash": "sha256:a19ea5da35b952449b18f230c93566ed1ae9f6be1b92a648c277e50a37a94261",
+      "shard": "sha256:fb43deef8015e3a324bd0558b1c2e7f5a616220a56e35fe7e6a5cea678a5532e"
+    },
+    {
+      "id": "crypto/fips140",
+      "origin": "stdlib",
+      "content_hash": "sha256:a8ecbe09a8713a1a1ca47a59ed6aa6f77a4ceecc4a6598dfd2e9f328387488cd",
+      "shard": "sha256:af1a2db4d8e060a51d031bc7c54765a77795315e1ff9eed8ea2cddc8a4b457f3"
+    },
+    {
+      "id": "crypto/hkdf",
+      "origin": "stdlib",
+      "content_hash": "sha256:7d6ded55df0719a9612109a9811b2ba0b561fbd8a8cd9e23c73f83129c7625b2",
+      "shard": "sha256:b90c6c15576578f44a146990642c87f85c75c74fca9cfa67c014d8aae35795ba"
+    },
+    {
+      "id": "crypto/hmac",
+      "origin": "stdlib",
+      "content_hash": "sha256:91da701a800d899373555125f478db73a0866ded40ae3fddfa19e296d7c86596",
+      "shard": "sha256:faa1c88b6541693fb780c89d2102a2b0a5775f636fab43eb7a6b84bb613be5ec"
+    },
+    {
+      "id": "crypto/hpke",
+      "origin": "stdlib",
+      "content_hash": "sha256:bf23951aa5549c6d4f9038a19de164c81bbc25c40b46cbdc2fe57672afa66485",
+      "shard": "sha256:7266ee3fb1f61931964a80cf4e8ab7dfc67b91d695635e233f1b66bfd35366c6"
+    },
+    {
+      "id": "crypto/internal/boring",
+      "origin": "stdlib",
+      "content_hash": "sha256:36f1dcc8901e1d88c86dbc9bd1928b6032f0a8becef6b0618f08be9d22adcf14",
+      "shard": "sha256:2f5c8d0f691c2b99c75af3f7aba252cc7767e350147c5eb8302c55736a18f1a2"
+    },
+    {
+      "id": "crypto/internal/boring/bbig",
+      "origin": "stdlib",
+      "content_hash": "sha256:e43e2d834888564ce6597962a087d16e3108a9e2fc435d4610e6f5930267b722",
+      "shard": "sha256:3b493994b4030c597dcc249bd216dfd787f95009ff950da3136ff2173ee00adb"
+    },
+    {
+      "id": "crypto/internal/boring/sig",
+      "origin": "stdlib",
+      "content_hash": "sha256:e37ef847d0021f2ccb5ac15dbf5fe16ff81184b6016c3b603d53a086530fc963",
+      "shard": "sha256:cf5f208f9a78b4730104d8fb4f6d53b4f075c09b9f895f2753eecc021359efbc"
+    },
+    {
+      "id": "crypto/internal/constanttime",
+      "origin": "stdlib",
+      "content_hash": "sha256:d8983a0d479d2094a390130b8484c43f1635a90de736ad5c1da35e5ba0efc5ca",
+      "shard": "sha256:e774585033749f38e8630aac796c947c0090c446b62429cbf123d2ca1a115068"
+    },
+    {
+      "id": "crypto/internal/entropy/v1.0.0",
+      "origin": "stdlib",
+      "content_hash": "sha256:4e1b08e09037234d5c8721cc29b8f69e9a41e7fa569fe41e067c8d8b1cf419a0",
+      "shard": "sha256:24e074b8dc456b6f54ad736c2ba2646e4e9ddbc76cecaa2f0a902260f0b2df45"
+    },
+    {
+      "id": "crypto/internal/fips140",
+      "origin": "stdlib",
+      "content_hash": "sha256:76e333040f72091afcf90ef72cab5af12a689534492cba1a863a9d7b8df6798b",
+      "shard": "sha256:0561f7f8a17ba8613dedd8af216022caa24b085e7f214f37bb99ce5f489ea6ed"
+    },
+    {
+      "id": "crypto/internal/fips140/aes",
+      "origin": "stdlib",
+      "content_hash": "sha256:de90826a1d1067d44a289b553feb82e2db42f4f25631585949ffab743e276fba",
+      "shard": "sha256:fca397791c817f8fe5b9864b6271f7b172354d68aba59d9764552528ef705239"
+    },
+    {
+      "id": "crypto/internal/fips140/aes/gcm",
+      "origin": "stdlib",
+      "content_hash": "sha256:227e508a25d26430da27419d8918e5f6a13b6d60fac4cff1c54dd8ba0e67c325",
+      "shard": "sha256:ed7c2b8cedfe55aa225e5269ee81289a833f2edc444035bcd24623ea2ba62217"
+    },
+    {
+      "id": "crypto/internal/fips140/alias",
+      "origin": "stdlib",
+      "content_hash": "sha256:64babb0aac12e3b64ffab22026f3bccd8a0f5f88515ef8a468072a18d11e9389",
+      "shard": "sha256:7001c29d17886d46f766cc8d9128138e626868b0d2b6193c819e4781ec7cbfea"
+    },
+    {
+      "id": "crypto/internal/fips140/bigmod",
+      "origin": "stdlib",
+      "content_hash": "sha256:25c4e88f1a888c82beea2dc9f86eed3c909a905e72655ffd8ab46304d760a71c",
+      "shard": "sha256:24339fd4447c6d6b8ebc942f765317173dc8adc66243908f216cbe67919f6323"
+    },
+    {
+      "id": "crypto/internal/fips140/check",
+      "origin": "stdlib",
+      "content_hash": "sha256:062a1111d818002b0daa4bcfbd27a019ba8ded2e8f68940483dd012d31cd9c31",
+      "shard": "sha256:9b654c74ec6dbfffa7933198375b21eb2cbbb0cba9447f354de9939ca023f99e"
+    },
+    {
+      "id": "crypto/internal/fips140/drbg",
+      "origin": "stdlib",
+      "content_hash": "sha256:bfda52073278ee5d5baa885b42870974c530139b5315e22737e765b69b5fb1e9",
+      "shard": "sha256:b450c16c7f5495e331f7e0fc48cea85d215a7d1d7f5a2992b8ec41636c81dd79"
+    },
+    {
+      "id": "crypto/internal/fips140/ecdh",
+      "origin": "stdlib",
+      "content_hash": "sha256:af1467ffb8ab5c06221423b8199b83f425bbd77339c8e36b0a32144011547a72",
+      "shard": "sha256:3bd72be398572c26445380ec605f8c681dcf64d78111f7b92238dd1b5cd27ce8"
+    },
+    {
+      "id": "crypto/internal/fips140/ecdsa",
+      "origin": "stdlib",
+      "content_hash": "sha256:e670ac1eac7487a601c3aba4ca196ff3166cf4d33d112513c6a40ffe2e66ef0b",
+      "shard": "sha256:1891b16bebb598bb66125b4ca53165a490ddc62373f7a12b8aae1dce6e67860d"
+    },
+    {
+      "id": "crypto/internal/fips140/ed25519",
+      "origin": "stdlib",
+      "content_hash": "sha256:7cdfd2c2f54004104cb32fedc80b28a6da47b2572b378f051eeab8404d31d70a",
+      "shard": "sha256:0121476ad392c132bd3ba85a414d9765d989892c0538a96b75292700ef805601"
+    },
+    {
+      "id": "crypto/internal/fips140/edwards25519",
+      "origin": "stdlib",
+      "content_hash": "sha256:e6f297713bcdb3ac0badd74e323d8a03e7f13cf28f158a867ce8fe40e8281ad8",
+      "shard": "sha256:aaaf7b0fe481e46776e9c0f8ed684625baa181d3b5e846c8140a0da110121c39"
+    },
+    {
+      "id": "crypto/internal/fips140/edwards25519/field",
+      "origin": "stdlib",
+      "content_hash": "sha256:1ab9e75a0379a62ae53fe89e66a60dcecec523cfc4f12c5b221f78c6c979d59c",
+      "shard": "sha256:3e7d53856adbb9475e57c043de6e73f056388bdae8e26f9521a4e05351c317f1"
+    },
+    {
+      "id": "crypto/internal/fips140/hkdf",
+      "origin": "stdlib",
+      "content_hash": "sha256:0d91f9c90f0ddc7299443161a15b8fafee7c9e95cba08e205a55fa1f634afd97",
+      "shard": "sha256:6ed3e9c2769cc611a9ca6a495e3ea2c731a3d008324adbb3c665f055ce35e41c"
+    },
+    {
+      "id": "crypto/internal/fips140/hmac",
+      "origin": "stdlib",
+      "content_hash": "sha256:62df65d1ec9feb0dca9d1856f00aa59efe884b4775379f4bde08407e5712aba5",
+      "shard": "sha256:6a21063c6c8f9ad12a696df99de4551c56d3aa7c7dd7410b7fa34c3fc555eed7"
+    },
+    {
+      "id": "crypto/internal/fips140/mlkem",
+      "origin": "stdlib",
+      "content_hash": "sha256:12c8a0c10592b3f68d2f5d75beda67f36c6c6b81e3c6946f6ab0ce99a1664c2b",
+      "shard": "sha256:82096011c7f4040ad42f07b05193cf568b7be38ab171e886dbedc797dbee0bb4"
+    },
+    {
+      "id": "crypto/internal/fips140/nistec",
+      "origin": "stdlib",
+      "content_hash": "sha256:161a2d3a97767129a07ecc9d6484db80b14eb0e5494cef754f4127cf5392ffd2",
+      "shard": "sha256:7981f35ac0aef200fcf51f35ec9f9c5e0d64b81c474cb3ca3527940f5adf1aed"
+    },
+    {
+      "id": "crypto/internal/fips140/nistec/fiat",
+      "origin": "stdlib",
+      "content_hash": "sha256:bb7acc34570cfcdcf12fbe24e717337f311ec64fbdf15026431174ebaf8d83e0",
+      "shard": "sha256:af3095b2376d0dc9704732f711ec67cfd4f4df500a4f6813b982fc2fd6583bc1"
+    },
+    {
+      "id": "crypto/internal/fips140/rsa",
+      "origin": "stdlib",
+      "content_hash": "sha256:decffce2b28a03c41c584a11ae72ad0c50c5b536b5aaf3c2d41ec97aec43f0fb",
+      "shard": "sha256:26822a71c8e9eb5cf36df6dca3d6edba2413fe3af7f9164063c4503908c5873e"
+    },
+    {
+      "id": "crypto/internal/fips140/sha256",
+      "origin": "stdlib",
+      "content_hash": "sha256:85591db0344883f7ee4d921b0cdbfa5fad2ff9a1041b011281f76d65eadec984",
+      "shard": "sha256:127aed099bfbd9aca0d69b2f9c57436ceae3b6d50e1047388605e14bdbd323ec"
+    },
+    {
+      "id": "crypto/internal/fips140/sha3",
+      "origin": "stdlib",
+      "content_hash": "sha256:f950d1e33c5d6516aadb03976a3105387ed4a46036148794ce9672a6deaead9a",
+      "shard": "sha256:2dec739eadb634f838a903a2c2b9a2eec86e9c8fd5aa630b01767e78ae6b4ab3"
+    },
+    {
+      "id": "crypto/internal/fips140/sha512",
+      "origin": "stdlib",
+      "content_hash": "sha256:07d19e6400c0efe8947ca51695626fa3446c5f653144faf210d9401384ef441e",
+      "shard": "sha256:a295bdc09f94a291400cae20121ea8823f9d7259974b4f0c3af52bd4c97b44cd"
+    },
+    {
+      "id": "crypto/internal/fips140/subtle",
+      "origin": "stdlib",
+      "content_hash": "sha256:e254fecebbd8203a90a96c28054e1fce57d4027c3c86aeb20a39e1d229bfb91c",
+      "shard": "sha256:83ffa955d545111c39e09ae01d548311fcf2a9e140d3bc50c609f6fc63d633fd"
+    },
+    {
+      "id": "crypto/internal/fips140/tls12",
+      "origin": "stdlib",
+      "content_hash": "sha256:74159f9ef2d57ed7c0c4dfc07b1e3177a7e25fb22a6ee2c0037a515c63cfbb28",
+      "shard": "sha256:6ceda0d00723d19ee6c4cb3ebe9c3b9903afeb5fbacc327eff458f1503183b69"
+    },
+    {
+      "id": "crypto/internal/fips140/tls13",
+      "origin": "stdlib",
+      "content_hash": "sha256:4c64ad691e5e317fb902eecfbd811cdb118873c240fe2e9105f83762c52523be",
+      "shard": "sha256:1f9631506a4db269ed3a92e78b832a62bac8f8f6921fae93a4c2a37726f9a6dc"
+    },
+    {
+      "id": "crypto/internal/fips140cache",
+      "origin": "stdlib",
+      "content_hash": "sha256:9473fee3bc78ab0964aada3610c9849508b56aaca322fdc1100c407ec435dfe0",
+      "shard": "sha256:e819c3938924029eccde3946eb9ac38d07b94af90d91303f0e13e6acb7411d35"
+    },
+    {
+      "id": "crypto/internal/fips140deps/byteorder",
+      "origin": "stdlib",
+      "content_hash": "sha256:98af0819843159dfc25be82ab96d4a220a2928acd9f78ed51be90f20b17dcb05",
+      "shard": "sha256:6870abc2a90d0ab78e2141c18a1bca1dafcde47fff5cb8fc900d50d225246fab"
+    },
+    {
+      "id": "crypto/internal/fips140deps/cpu",
+      "origin": "stdlib",
+      "content_hash": "sha256:67377e41b24e9f7662ce22694962f5eaa285d8c8a4ab20f0bf727e7e8b441a46",
+      "shard": "sha256:1e4c4363f5f7789d4955bddc4118f7b0f532463e377c22c3c92ae2188e2d5fe1"
+    },
+    {
+      "id": "crypto/internal/fips140deps/godebug",
+      "origin": "stdlib",
+      "content_hash": "sha256:fb9c4c4d8c984b7e060514136ba4c47900f8f0dd37a948ea96ff0faac0f36b93",
+      "shard": "sha256:7fe2cc166b0e9ed0f222cd90951e8d8b008ad75c5f13c627307ab53627b7d175"
+    },
+    {
+      "id": "crypto/internal/fips140deps/time",
+      "origin": "stdlib",
+      "content_hash": "sha256:87cf76c0f3be00e7eea304686bfdb628d9755935e4f20b665b5a815180cdd2a2",
+      "shard": "sha256:79e8057e0d95bf220ac2069532d1e00a132788f0ad66814ca6a63c4f770ce384"
+    },
+    {
+      "id": "crypto/internal/fips140hash",
+      "origin": "stdlib",
+      "content_hash": "sha256:cb41214b369d4558a9c2e6f2312d07f77ae577c40c773f5458da9fcf41ae171e",
+      "shard": "sha256:c5e2523edf71a896b548278663915ed97723d5b9986d79eb2ccbeae5aeda8bf1"
+    },
+    {
+      "id": "crypto/internal/fips140only",
+      "origin": "stdlib",
+      "content_hash": "sha256:26c8dc490771cc5d41a05e4461d2908722869e6ddbb0dc874dfa98e7f915a0b5",
+      "shard": "sha256:ffc058694e6d9a841bf39e03c2fa770fb209227202e056c64881bede84124b49"
+    },
+    {
+      "id": "crypto/internal/impl",
+      "origin": "stdlib",
+      "content_hash": "sha256:6614411ab7b976eeb188d95552833086722678bda46e2618c8d7dde1004378dd",
+      "shard": "sha256:51cf153c16a3f46044bf268d4b6c4d95cac04300959b4acf690d6776b4e94e3f"
+    },
+    {
+      "id": "crypto/internal/rand",
+      "origin": "stdlib",
+      "content_hash": "sha256:ea9a20dd6e0b04f082e1d98c5eb2f407e837bd992767398518cf0613948c763b",
+      "shard": "sha256:8cea7cfd46750b50ef8c559246a744d573c94267bb6d4fddf6323e59ddec41c9"
+    },
+    {
+      "id": "crypto/internal/randutil",
+      "origin": "stdlib",
+      "content_hash": "sha256:ff3218cfb88c0a0500d19eb5aea90f2ec8898b31cb80c49c0677b580eb1fed21",
+      "shard": "sha256:63369658cec5972ab7bd7431e4e3bb18e73fb69bae455aa29e85687f4027b2cb"
+    },
+    {
+      "id": "crypto/internal/sysrand",
+      "origin": "stdlib",
+      "content_hash": "sha256:39b3c6dfe09ec14e1f46b0b1e464b9cc514cbd74a10ea1711dc482f16e504833",
+      "shard": "sha256:464a32c0b61e3beadece5b02186f741496b3c00a4071213ea7798b2ad987f11c"
+    },
+    {
+      "id": "crypto/md5",
+      "origin": "stdlib",
+      "content_hash": "sha256:dab92cada593576491c1de6faf6a00ae15f016961ddd38bcf1fee8aea94df5e4",
+      "shard": "sha256:3ab245de24d1af384226ea153381c5326af6a9720168831b46f4d1a9b0df5f99"
+    },
+    {
+      "id": "crypto/mlkem",
+      "origin": "stdlib",
+      "content_hash": "sha256:d160dee391b9beba31cd57a876a4ba7f88cf5bf48fa8d3dd19940a9a032954fa",
+      "shard": "sha256:b6270b58a79a404366f441cca8f1bf77d166a7b734bd3074e06b1d29ae47b4bd"
+    },
+    {
+      "id": "crypto/rand",
+      "origin": "stdlib",
+      "content_hash": "sha256:fe691b1889c1dbfad05acebf70e15f553692ad25270c5a90228655824b570bb0",
+      "shard": "sha256:d28345c82bdcb61fac7887403918e995df70be3797250e119a866ae280a1b78e"
+    },
+    {
+      "id": "crypto/rc4",
+      "origin": "stdlib",
+      "content_hash": "sha256:ee1cc5e1f7430a0cb17797d6cff217840ea4c52ebb3654e431783453fedc23a1",
+      "shard": "sha256:758d86113397be5f91bc0fec35ca1d0def1de0810d44d224312a26b904ea1b46"
+    },
+    {
+      "id": "crypto/rsa",
+      "origin": "stdlib",
+      "content_hash": "sha256:dcb3b433b22c33443e56e8a48a2ac09b7cd57236a6711fb05ca0a4b6dee63927",
+      "shard": "sha256:1a8e5a744ed303937e94f1b5365765844201a6752c218964f0b23b468d94fc35"
+    },
+    {
+      "id": "crypto/sha1",
+      "origin": "stdlib",
+      "content_hash": "sha256:d863ebd8c118cce79450c55ec83f0e88692bc5542da03617dc496ecdc711458d",
+      "shard": "sha256:b2d697a1481b53fb584c5a311cc845d252dc685742ba2f2b3ca9be80e8305fee"
+    },
+    {
+      "id": "crypto/sha256",
+      "origin": "stdlib",
+      "content_hash": "sha256:4277267c9b337bf2a4ed6ef64fb9f7aa779f049f1941ecf7dae6ca5ccd2224ac",
+      "shard": "sha256:ffb41270e78a999ba1633104d8680a9a6752706d72d926d2caa73d26698fd032"
+    },
+    {
+      "id": "crypto/sha3",
+      "origin": "stdlib",
+      "content_hash": "sha256:9fecfef411da7edb19721a2c8e87c4f8a1f8a5d701865eacba8a7d5de59722eb",
+      "shard": "sha256:c6f09c65c6a02f7ecf478a9407b9fc8f068e9a7b4d98dff7ef278c47deb5b554"
+    },
+    {
+      "id": "crypto/sha512",
+      "origin": "stdlib",
+      "content_hash": "sha256:3ce924b36267ebcf81bd24f3547c93d6e9916b0ffffbe930b5ae46a89196daa6",
+      "shard": "sha256:1ffc43a2448af8f73da403b501051d2ba276c44d899639875b5082052d3496c5"
+    },
+    {
+      "id": "crypto/subtle",
+      "origin": "stdlib",
+      "content_hash": "sha256:45fbb94de6a7841822e895c0b82de7120963ed7a92743d3c31dfff9cdb9ad3ac",
+      "shard": "sha256:6d5863873daa95b440961e1f9401793f8f1df2bd1f82f4ec78f34cc26312bd88"
+    },
+    {
+      "id": "crypto/tls",
+      "origin": "stdlib",
+      "content_hash": "sha256:70c137c128f5f8286755f28fcd4cb4d89c44005eb52ad0d5338b5551b4e30ee1",
+      "shard": "sha256:5bef52da6930469a72aa22736bc6e255322016a3665adb260ac1ae15bad0a425"
+    },
+    {
+      "id": "crypto/tls/internal/fips140tls",
+      "origin": "stdlib",
+      "content_hash": "sha256:eb40680f1f0d630a91a4c6497b789befbf607b2e18bb3f7a0d5e3a3d3f438ae9",
+      "shard": "sha256:66a440165a06e0486a574a7a465b7deb1de6ca9e370734ebb02dee654b00d3c8"
+    },
+    {
+      "id": "crypto/x509",
+      "origin": "stdlib",
+      "content_hash": "sha256:e03134cce84dd9df67602302dad24c0460a1220243cedfad0db3397eea993f2c",
+      "shard": "sha256:c3abe3d18e9da9837454a31e5d76833900115cee960e883898bfbbe4880f4421"
+    },
+    {
+      "id": "crypto/x509/pkix",
+      "origin": "stdlib",
+      "content_hash": "sha256:ff3272b6eefc5469933a3d04132722ca69f6d48e218fc0cab95a5ea19dee8839",
+      "shard": "sha256:505e32650ad38794bc052224e1349234e40655d350d78d32f3fa474237e5b262"
+    },
+    {
+      "id": "database/sql",
+      "origin": "stdlib",
+      "content_hash": "sha256:0abfe267a61695b8e9f66e5dd3b097ec043eaa357ef7e8afd6c99f80739b73a7",
+      "shard": "sha256:a406c43d44669fdc491e282001cdf6b89565825c13d131be93c31163138f7411"
+    },
+    {
+      "id": "database/sql/driver",
+      "origin": "stdlib",
+      "content_hash": "sha256:1546f7f78825d8cdbbda7f2fd5ef10ddd1a8c72d97ab293e1c0bd8db67cc4bf5",
+      "shard": "sha256:1b99a6f9bc1726959eea824059b55a4f39cffe40e9419729887b0950fd11fb9c"
+    },
+    {
+      "id": "encoding",
+      "origin": "stdlib",
+      "content_hash": "sha256:4614c05e5fec2af1a2002bb8795eef5094bf9eefb9ddfe7bac6e0fbc4b274d64",
+      "shard": "sha256:6e52cb035494523c3b238f418e17bbf78972184477aef2e17a8d4d96763cb363"
+    },
+    {
+      "id": "encoding/asn1",
+      "origin": "stdlib",
+      "content_hash": "sha256:4c2eaa8637cf4b17c1cc67b3d01bcc4a3b518c27dc12b633ab5c245e95f168e4",
+      "shard": "sha256:e0afe1181485c4225f7a29fe73a530fecee236937309e194aed67bda20bcce45"
+    },
+    {
+      "id": "encoding/base64",
+      "origin": "stdlib",
+      "content_hash": "sha256:70105e9306ab4715c9a2b45a8e524b7ff3b457fc3d9488fc3db422d472bc0bda",
+      "shard": "sha256:15c2382b54afe2126c16ab961c91529595a4a73dcef288691b7f466c74797769"
+    },
+    {
+      "id": "encoding/binary",
+      "origin": "stdlib",
+      "content_hash": "sha256:5440bc62a13dbae6a96e67f72a6380ca9c02a63b9a39646483164ba6c0f15aaa",
+      "shard": "sha256:afb6e81bc6ae8ef30ad9dd4d4dde4ed77a4a1d64ececbb17060153c90a5f4f99"
+    },
+    {
+      "id": "encoding/hex",
+      "origin": "stdlib",
+      "content_hash": "sha256:35ebd577ce110ff812bf11866540379c72e7fa02f366c759ca6e9bf356b72774",
+      "shard": "sha256:e8e16505b500ea3e889f797a7dd56c4455621794ee7566adc3647ce12b205785"
+    },
+    {
+      "id": "encoding/json",
+      "origin": "stdlib",
+      "content_hash": "sha256:54df84fdedca8447f336d53878192a9fdc1ed91aff190e96145834fd2fc98835",
+      "shard": "sha256:f81189107cc6824553b3741e7fc9301c6dbf5356ccba510a2cac4be4821faefc"
+    },
+    {
+      "id": "encoding/pem",
+      "origin": "stdlib",
+      "content_hash": "sha256:1d046268ae92af807e31358c6dfffb1f198e42a3537e5b8ce353407c312d6772",
+      "shard": "sha256:9f1e80c0c6b35b1e22d70f2a1ea427c32a4bc688c7dc54f9b67402934433bae6"
+    },
+    {
+      "id": "errors",
+      "origin": "stdlib",
+      "content_hash": "sha256:78a11b09ece5de1c4fed0d20eee09d2c3ae73ef91ac1dd663ada464451da2032",
+      "shard": "sha256:92c8beca1b0f58f0cce55e42eb0664f2453d18b5c902c178513f6f6c0564e42c"
+    },
+    {
+      "id": "example.com/demo/cmd/demo",
+      "origin": "module",
+      "content_hash": "sha256:57805faf2e85ec62856e6e4a820f3d838ba82aed4813b74c9507c4626c796a43",
+      "shard": "sha256:37e60dc2043a7db16de057fd3d582e145c0099442ce31241d300481bfc96afcb"
+    },
+    {
+      "id": "example.com/demo/internal/auth",
+      "origin": "module",
+      "content_hash": "sha256:5547707be87539796c5cca2ad75d7af0cd16f75397c597b90b66917d04163763",
+      "shard": "sha256:358d46110661f00cc35717b04ee3ac9ec32022d2905362257f593587a7b7aa00"
+    },
+    {
+      "id": "example.com/demo/internal/auth/private",
+      "origin": "module",
+      "content_hash": "sha256:1fce1e68034f4d0da68c7c8c48052b16c459cb9615aab807866be0fc37156051",
+      "shard": "sha256:ac14bc840d222e2c2adcaca1bf908a0387d8f787f41d084cd02724ae6c0b1a47"
+    },
+    {
+      "id": "example.com/demo/internal/billing",
+      "origin": "module",
+      "content_hash": "sha256:f9179c536a3b38448f454071eb9c71592c9a328940b4003a8ff27a379c5b509a",
+      "shard": "sha256:c930d7c6b346736691ddaa4f27fa42e4de907af0322255531e277a3fe9ddaf34"
+    },
+    {
+      "id": "example.com/demo/internal/handler",
+      "origin": "module",
+      "content_hash": "sha256:2ba78b332609c12d23005344c4fc384fd6678b05ba7339837b0c1aa56347edb2",
+      "shard": "sha256:b1aaa721a62a602b49601230d8a5f2621ce7d5ba6ca7d7e44221c1b018110809"
+    },
+    {
+      "id": "example.com/demo/internal/repo",
+      "origin": "module",
+      "content_hash": "sha256:bd29b58f358019e4cd5c209934417fe2699c60cd2294a9a2d172cd249c9a2421",
+      "shard": "sha256:fc7f426557c8d01c3718065835d9db7bc9bfb6a2ec3c1cc3069656719dd0b404"
+    },
+    {
+      "id": "example.com/demo/internal/server",
+      "origin": "module",
+      "content_hash": "sha256:f6a99cc73178e1c517ff27cb80d0446f6de2445669652589e7747b70701fd64f",
+      "shard": "sha256:2cb76ed4cb006290be337703c30e4812839999eb60d46c8d4b26361a61cd9202"
+    },
+    {
+      "id": "fmt",
+      "origin": "stdlib",
+      "content_hash": "sha256:8cd6f6ed9566288f3ceeb0a658d2cee243024e96813dfb8293a7a10a1576fbe4",
+      "shard": "sha256:6c9b2b1481b1c1168188183fc0b19b7e8afe9aeb7d53c22d32d4328fe207a6a7"
+    },
+    {
+      "id": "github.com/go-chi/chi/v5",
+      "origin": "dependency",
+      "content_hash": "sha256:cc507711d4352ca6f7c291a733f6c38f5b57f6929ce4c90d61cace4533a27ff8",
+      "shard": "sha256:9813a377766709825faea8d29ef0074545e01bb6fbd82b02909eecd79bfa42aa"
+    },
+    {
+      "id": "hash",
+      "origin": "stdlib",
+      "content_hash": "sha256:9ad6e758fb26887903fe6c1ba6f35afb37a5980afbed1eb7af4eb1bbefd93773",
+      "shard": "sha256:db55c2e23e9961a7a4b26e7ddc3f47ebd88d344b67c4034859ddec6f94e4c43e"
+    },
+    {
+      "id": "hash/crc32",
+      "origin": "stdlib",
+      "content_hash": "sha256:701e4abf2bb2e0f89a5c48ce72c061b724f9db547f86d37e59aeeaa7e0783f14",
+      "shard": "sha256:019d77bfc4a8ec83f01f5bac3eaf5d3be164cce4588ff28456abe58dac883788"
+    },
+    {
+      "id": "internal/abi",
+      "origin": "stdlib",
+      "content_hash": "sha256:e53bb2f48e94b0f3a0fd8ad47cfe080f9656d0917c107e424b1907a84451bcd4",
+      "shard": "sha256:e0abe6b3e5e8499669a01634196e528d5431ea811ac6d70aecd3d6936de36f5a"
+    },
+    {
+      "id": "internal/asan",
+      "origin": "stdlib",
+      "content_hash": "sha256:737c6a03227f6bb8090fbef3a0887dcad54d3b439d70d95a493150dab8251ff0",
+      "shard": "sha256:f4f57306760c74850acde6d9939141f1c49b8fe58157e73d89c147d01e2f7697"
+    },
+    {
+      "id": "internal/bisect",
+      "origin": "stdlib",
+      "content_hash": "sha256:8fc05feb4b49f1bc56321424cbb425461568885e6ce58760eeef6121ced9aaf7",
+      "shard": "sha256:7e8db3925d0ade0b601333741aa7b2e04ab5b43b3f2062845e47213bc1ff601c"
+    },
+    {
+      "id": "internal/bytealg",
+      "origin": "stdlib",
+      "content_hash": "sha256:1a6ab9a9e3716e51061cc9123ba04863f9d5639a0c767c02977c2221bf44eca3",
+      "shard": "sha256:5268881d9bf9e13c7948d0991bdb88e4a77d73da1ebc1ec1e4bd7abb662a949f"
+    },
+    {
+      "id": "internal/byteorder",
+      "origin": "stdlib",
+      "content_hash": "sha256:00e04d67287b392b849623c38eec9f96cc4de6fdfe46d19e1df21386d59da753",
+      "shard": "sha256:957ace082beae3b99d825f27525067f25a234d5afaa73d7dff6a0ef812c43de5"
+    },
+    {
+      "id": "internal/chacha8rand",
+      "origin": "stdlib",
+      "content_hash": "sha256:94b5be127b4b0672868ae33ade656af8099c9e1fb0460a76584a88ae08d6ba14",
+      "shard": "sha256:e08ac8a8acee4af0c86439025b46312fb8391151b335a9bfab41ee14b14a2da1"
+    },
+    {
+      "id": "internal/coverage/rtcov",
+      "origin": "stdlib",
+      "content_hash": "sha256:82c951f77b9bbe347c4143c1485c5acec7445c5be79f7b8c66f17ffa2e4bd2de",
+      "shard": "sha256:5459cbe1c7c53deb9694adc71480b1a49db5d27e64ad8d10ec1f2870937500d3"
+    },
+    {
+      "id": "internal/cpu",
+      "origin": "stdlib",
+      "content_hash": "sha256:083b32bafce27c24251b52ae87ecd3b64acaaae2a5f54ddc2cd9601a3226fa41",
+      "shard": "sha256:da5a70edfba8d2c7cc4489e5daed596ec2ea77f3992cf559dd862b1dc35d4159"
+    },
+    {
+      "id": "internal/filepathlite",
+      "origin": "stdlib",
+      "content_hash": "sha256:43d665cd150cb8713834045f633b6692e18079bfb7a7ecea6f9fc511fb148635",
+      "shard": "sha256:c04110741dd10bf15a49cc57b74cf7dddb4bd6e1b740b6ef510c444b87a1000c"
+    },
+    {
+      "id": "internal/fmtsort",
+      "origin": "stdlib",
+      "content_hash": "sha256:0e204f00923bb7c94bb753bcd47a05595dfa781de844af3b7f9c7c93fe60a4bb",
+      "shard": "sha256:04529c1ce1f5c079a922d8e6d9676419c969dee3072bc5bfb2a0b2e71f3bb7bf"
+    },
+    {
+      "id": "internal/goarch",
+      "origin": "stdlib",
+      "content_hash": "sha256:ed0b5ea4b17da9dd0ee5b53f6ec93df00a7aed9c23cdf91df6d4a2663a46f7ac",
+      "shard": "sha256:0c6abe25a5e8fb3d2cbfede6008c98f4b88e23334b334f854aa6915cf8387488"
+    },
+    {
+      "id": "internal/godebug",
+      "origin": "stdlib",
+      "content_hash": "sha256:3a491f080e36f25103ee12b811eb57ff6db8f87266a05ca0a3f49d9e2281789e",
+      "shard": "sha256:518161562bc62ef71cab1e4609b1a92861161c963f849c07ca8cd88720b1d08a"
+    },
+    {
+      "id": "internal/godebugs",
+      "origin": "stdlib",
+      "content_hash": "sha256:e1e030204c9d4abf51c98c89b5016615f0d44ebc38a3595ae139024ad167604c",
+      "shard": "sha256:fad12c507691a707bf7bc48c891e1cb937edddf74116beebd2cbd9861ac07ae2"
+    },
+    {
+      "id": "internal/goexperiment",
+      "origin": "stdlib",
+      "content_hash": "sha256:1c16c15b84d6e0ba0b19cdfe7b08711a0625ab7250b236a870cc642d728086bf",
+      "shard": "sha256:7e091ad51c8afcc2bfaf48246223615a67dd66145fc5155d1e3bc56eb8b7119a"
+    },
+    {
+      "id": "internal/goos",
+      "origin": "stdlib",
+      "content_hash": "sha256:523da1ce1de86570f2b11bbc4d6ae6207422cb5d4a10b833d1524aeb0a45d0e6",
+      "shard": "sha256:98bf75e64e552f3dfd9584b53e66eea04367903c34f63320cab48d6c422acc1a"
+    },
+    {
+      "id": "internal/msan",
+      "origin": "stdlib",
+      "content_hash": "sha256:d747b84b20a27181e4ab08770bc8176b7f6682c2053d7db22693ea6ef0e144c0",
+      "shard": "sha256:34b84e41f0a486de663822fb62da04ceb5694fb28f6d2f0c0066aebdfe37ee63"
+    },
+    {
+      "id": "internal/nettrace",
+      "origin": "stdlib",
+      "content_hash": "sha256:3557b187dbe1e6cc378c588089f24c5a105a5611d5f094ef718c49c3a4238ed3",
+      "shard": "sha256:0028d1bdba8fdfd9c26153a8516724ae8200470af6354ec3d43b78d95518f8ce"
+    },
+    {
+      "id": "internal/oserror",
+      "origin": "stdlib",
+      "content_hash": "sha256:ecbee376ef04ab413b5f3d5053515205b8a9a8f3f283aa270395b3557d850481",
+      "shard": "sha256:4a7a226c67c4d9a000e6918955f62007610ab1eace2505a038ed56df424f80af"
+    },
+    {
+      "id": "internal/poll",
+      "origin": "stdlib",
+      "content_hash": "sha256:6b26d0a82902d13026788d208411d2503dea92dbae3bdbb126155fbae8ae4b8a",
+      "shard": "sha256:d7c9339527022ff9d193d7bcbc7c1abad6d398b1ec8f5b74ebb37878f0554bf8"
+    },
+    {
+      "id": "internal/profilerecord",
+      "origin": "stdlib",
+      "content_hash": "sha256:98dc8e46bdd273cd8c5391ab11fd68486f11b8d3847ad724a3bea58923b2f974",
+      "shard": "sha256:86f0435b7d93bf98a6f9d3b430fdf800ccf39d46f73a2fce66614c13295dc839"
+    },
+    {
+      "id": "internal/race",
+      "origin": "stdlib",
+      "content_hash": "sha256:cc2683e98223333637f964c05f834aabb7693707140c9bfcceda006e2fcb06ef",
+      "shard": "sha256:7f49556fa95611d0dc08d1e7c599166aaed762a9beef3efab5d64f2d31fe8cfe"
+    },
+    {
+      "id": "internal/reflectlite",
+      "origin": "stdlib",
+      "content_hash": "sha256:3494f41dc75b9925b354fe33d36ae292044a99f98738ec0ca961d25964f3c190",
+      "shard": "sha256:37ab787f32af497168de0313dacf5d26127d6c8a1e254a98257fe13f42c9e58a"
+    },
+    {
+      "id": "internal/runtime/atomic",
+      "origin": "stdlib",
+      "content_hash": "sha256:b150383f40b314b5377d0ba2e3667dfd2af43a6f08a8d11dc346fd442861df8c",
+      "shard": "sha256:495c1b3ac843d28dbb72eb499b662c7c802aaaa98c12fde989ceef3a7a08736d"
+    },
+    {
+      "id": "internal/runtime/cgroup",
+      "origin": "stdlib",
+      "content_hash": "sha256:d1f0f31799b4ce36fb3853384e798f7d05871b33e4d6ac0e83827160b2c6f1d8",
+      "shard": "sha256:12a00717fb253c9494a4363d3005511cd8c5855b81e423c8171b0369406b694d"
+    },
+    {
+      "id": "internal/runtime/exithook",
+      "origin": "stdlib",
+      "content_hash": "sha256:efcd6957e91d9fec94f99b3ca72d64cba7864955bec4bd4d80f4b1120831bb64",
+      "shard": "sha256:238ddc77cd7e1c508df94a6558f732562acc72ad98b05e2c3f7699afa43c7239"
+    },
+    {
+      "id": "internal/runtime/gc",
+      "origin": "stdlib",
+      "content_hash": "sha256:103136b979060e39496e14c4d72b11a268440f85d8e03a909b94111cad7ffcf6",
+      "shard": "sha256:d4a4584049d862a9c751f2faadcd567d4a580b981f9fb11cd7a8598a850414f3"
+    },
+    {
+      "id": "internal/runtime/gc/scan",
+      "origin": "stdlib",
+      "content_hash": "sha256:e6275cf5a5f9701ded516049f6ca9991a26bf739e60d8a1c4c7f2802ee36bace",
+      "shard": "sha256:7366eb95e3f1aeff1b0181fc521762d8aa3c055ca4de97b5f17d76744dbaf886"
+    },
+    {
+      "id": "internal/runtime/maps",
+      "origin": "stdlib",
+      "content_hash": "sha256:ccc0e15f74f7fba51ee9cd804b4a5d8ddcc91c9ab5ddee478a9b24b0c52e7ca2",
+      "shard": "sha256:95a47203e1c9f015aee047d125856fc2ea7b72ee149a4d76cdb1197b0a407042"
+    },
+    {
+      "id": "internal/runtime/math",
+      "origin": "stdlib",
+      "content_hash": "sha256:e9a18bc0ff203834d8bf014d9ebe24aa87deb5895f46722c7fe7da823d90c188",
+      "shard": "sha256:645fad6614bc5536b0afacac817e367b6b72ec2b42b7c24b124b2e0b0c75b336"
+    },
+    {
+      "id": "internal/runtime/pprof/label",
+      "origin": "stdlib",
+      "content_hash": "sha256:5995619817b10b86acaa16d38b3d111203624a60550b99d59685676c389bd645",
+      "shard": "sha256:580f7a1062f908feed28592aadd7c78ca775d2260b998058d9b2de0dd359a2a4"
+    },
+    {
+      "id": "internal/runtime/sys",
+      "origin": "stdlib",
+      "content_hash": "sha256:122a3f2ddb64cf5ca835dff9c69dac4dcdbd0ec94fbf03260171dbcc0ff8c999",
+      "shard": "sha256:5877aee00efb3e22491818bdac1cd853af99e2c78ec7621ddfaf38042254fde7"
+    },
+    {
+      "id": "internal/runtime/syscall/linux",
+      "origin": "stdlib",
+      "content_hash": "sha256:12a2caf3e17ddd33fbd8ecf3b701ede858b24ae089ae202e9d3dd80c4a1f6a8b",
+      "shard": "sha256:646c6163df5bc0d69ce0304ba620e8dbf2cb615c4586c0e6993ea98a82fd7039"
+    },
+    {
+      "id": "internal/saferio",
+      "origin": "stdlib",
+      "content_hash": "sha256:7ce06aae3ba11d116d4aa162af28be5f19009c5d4c6c2926eda8532d3b22fb8f",
+      "shard": "sha256:67622d1e22cc85033cde7f35d5d71eef5cd22e9926912821125c91bb41a63fd0"
+    },
+    {
+      "id": "internal/singleflight",
+      "origin": "stdlib",
+      "content_hash": "sha256:ee64f58a4b4336936668b37ccee61019c160ed33f969bd0500a2adeab3152fe0",
+      "shard": "sha256:16c0d5e37057c8f92cf9fb39ebbf3e9044c70683390df6135c71b3fb37f6ca74"
+    },
+    {
+      "id": "internal/strconv",
+      "origin": "stdlib",
+      "content_hash": "sha256:1bef319e55096a45497a048e33e3e2d78d793db31da9e366f7fc7801b106ac66",
+      "shard": "sha256:508b9a6aaf45e5b1fcd16ca8c21c99d0e5038a82703185ef32d77f338216ddf3"
+    },
+    {
+      "id": "internal/stringslite",
+      "origin": "stdlib",
+      "content_hash": "sha256:b6a78961b22cb02160888d64a47d51d119576af10b6f003775cdd73a03a17de6",
+      "shard": "sha256:efdbbd81fa7f849bb6cb3b5f03981b8ee49736aeb868f78a6352f034381200cc"
+    },
+    {
+      "id": "internal/sync",
+      "origin": "stdlib",
+      "content_hash": "sha256:482db33f6c6620e53be5d5d61ee829ca63939b4e312e0c1aed7e1922e9919170",
+      "shard": "sha256:5ecaf5daf518a811175c0c114208a3bbab21bf4a7e7dcc05d23ab48946fc9996"
+    },
+    {
+      "id": "internal/synctest",
+      "origin": "stdlib",
+      "content_hash": "sha256:86cccd1603351c3ecb8119bc1ba89fd3000d9804ee5e3df8032f41afeeb80596",
+      "shard": "sha256:5365f6c7eaa8f8d666b4dc6e4d6408e938364678aea5d166adb09503c72a8e7e"
+    },
+    {
+      "id": "internal/syscall/execenv",
+      "origin": "stdlib",
+      "content_hash": "sha256:b5335a5472dc4ea806fdc4ee98668b50a27ae54ad5b27644016bfcbd8ba25fbd",
+      "shard": "sha256:d5e3a79cb4fed63d65d53972f477572c67abf864795fc2b26d01168a0cfdc55f"
+    },
+    {
+      "id": "internal/syscall/unix",
+      "origin": "stdlib",
+      "content_hash": "sha256:d301ec0eb7329c7cd126b2d1c47fa121acbadabd08ac47ae36c9c04bde6a8643",
+      "shard": "sha256:0cce5219e88499a98c670f93a8b2e57fb805cd7dd939b8435c40bb0aeecc83a3"
+    },
+    {
+      "id": "internal/testlog",
+      "origin": "stdlib",
+      "content_hash": "sha256:f28f04ae744243fd53a8819867e9a5a7af48dee879132fe1575a6465421d0a73",
+      "shard": "sha256:27d974fbef720a6a04042e85c61d68469ed1365070e5b229ea572f212c375b90"
+    },
+    {
+      "id": "internal/trace/tracev2",
+      "origin": "stdlib",
+      "content_hash": "sha256:420fb848bf930fdf7c58ec0535a3caca1d126e1d58f3ff79b4bc5791e2b9d375",
+      "shard": "sha256:317ba432a563a201e02832cf3d3e93d8a08f7f9d5bb0de46f44d12711beb8e7d"
+    },
+    {
+      "id": "internal/unsafeheader",
+      "origin": "stdlib",
+      "content_hash": "sha256:11c482c57e819c9baf9420ce42e9e07079e4665db4b56581e56358184fc5a6bb",
+      "shard": "sha256:6479c318284223465c08cdfe4d49b7cb5f9ddd357e9d395bda52a64659d9b25c"
+    },
+    {
+      "id": "io",
+      "origin": "stdlib",
+      "content_hash": "sha256:02bc9a4286abb36979e8c735f949c054ba7276b7e7acc271f9ccf4454a9f6628",
+      "shard": "sha256:08797432ef91bc5e6e0eece20bc24e423d71977e1127303ca4df9cd4ac6682ee"
+    },
+    {
+      "id": "io/fs",
+      "origin": "stdlib",
+      "content_hash": "sha256:0e4056432bf7acacf2f9eed69cbf0f6553b782e32021ebdea848482d4311a76a",
+      "shard": "sha256:66981203690b3f3260132533e96c5ad5747fb0fbd6c136bc6ea8d1c8123df72f"
+    },
+    {
+      "id": "iter",
+      "origin": "stdlib",
+      "content_hash": "sha256:b6442001c467df947f6413f4bd0c649fda6a7307c2264fa93490212e10933f86",
+      "shard": "sha256:347ec348e0ef37e25e636dc1de8c259e6ea190528115e17a8453ec0ed380c354"
+    },
+    {
+      "id": "log",
+      "origin": "stdlib",
+      "content_hash": "sha256:129fb845bdbb6c08cc1a3c56a555fc4f7a9b79a06fe5c4c2522e0b44230df58c",
+      "shard": "sha256:f61e11741376bbcade4eb680d6a8cfddbb837d496b4f1f147da9518c27ba1548"
+    },
+    {
+      "id": "log/internal",
+      "origin": "stdlib",
+      "content_hash": "sha256:10326009a20a5963c83f855da6689563a174358be53631a5789bb89ad8bd7fed",
+      "shard": "sha256:521a83f132047dd7f0845acc380a70976a64e0114862f30c69156b1c74767eca"
+    },
+    {
+      "id": "maps",
+      "origin": "stdlib",
+      "content_hash": "sha256:697a3c80bc9816cd72d09cc8690a27e2974531fdba1d50b57ebc716ea028cdf2",
+      "shard": "sha256:58addc623fc626645d1e4ebc06136cd524f46c15914113dce70c63745db44b0d"
+    },
+    {
+      "id": "math",
+      "origin": "stdlib",
+      "content_hash": "sha256:5fbc6969094c233d10835b5b9557a6a54ce224e8b0e8fbdbc67eb3fd7fd65da2",
+      "shard": "sha256:613daec2a30fafea53f5e8b95dc356d6b8fa69f7b6e69dc8f62e96ad570e629b"
+    },
+    {
+      "id": "math/big",
+      "origin": "stdlib",
+      "content_hash": "sha256:c5821ebb437d7900525e5847406f7ffff0d55886e97b4bcf9bfe640d3c9ecbd6",
+      "shard": "sha256:eaaa72087e2fcf06bfc60bef626891fdc4bf8e4451d547d66b130112fac5ea47"
+    },
+    {
+      "id": "math/bits",
+      "origin": "stdlib",
+      "content_hash": "sha256:e4149d63532757d21ecaef71aa446956ac573e7962e0e70b7891497a0444b9bd",
+      "shard": "sha256:e72980ab2a4098636b6d606ef11896fa4bacbdaac04c51711c3d3828bece4070"
+    },
+    {
+      "id": "math/rand",
+      "origin": "stdlib",
+      "content_hash": "sha256:9685d37d398e6bdfafbc4c66aa17060865304b3160ae365349605570771a691c",
+      "shard": "sha256:88aeefead1eb75edc0bb26497bf1b7e281159154b0c0751af0c25cca4d9599c7"
+    },
+    {
+      "id": "math/rand/v2",
+      "origin": "stdlib",
+      "content_hash": "sha256:30dc8166f30a8ca2745080bb4ba3744eb7295db4ccc874406c926a9eca533951",
+      "shard": "sha256:e7f9dd65003adcb8b37b07d9189ef91b2a1ba48b225ed0063035b9c85d139b1e"
+    },
+    {
+      "id": "mime",
+      "origin": "stdlib",
+      "content_hash": "sha256:35625a626454b2e57b20d96e66e16cb0d9bdce29cd194d8671372599101bf29c",
+      "shard": "sha256:ed6194365d852e0323e48c56c2cffe10190d8303055cfc2588ee7b10a547b111"
+    },
+    {
+      "id": "mime/multipart",
+      "origin": "stdlib",
+      "content_hash": "sha256:525f9e74ba9db30319883cdcc560b20c7c06edbf420b34fce091d5e2e0103ecb",
+      "shard": "sha256:a7c64913aefec6b0fef32a2f514ad193b9641e28860cb243ecaaa53df219389a"
+    },
+    {
+      "id": "mime/quotedprintable",
+      "origin": "stdlib",
+      "content_hash": "sha256:e6d56a731a5baeb9aca3f3952412ec930c899bb7ab6a07a5c37ca25e02f88e25",
+      "shard": "sha256:7e35893173b9fde05812a65d01c343bab5b8296e8dde33892e07866df1b5d997"
+    },
+    {
+      "id": "net",
+      "origin": "stdlib",
+      "content_hash": "sha256:ac6a248e2d6f411bd69893f85cf28419354f4e5eec705523e16c57c697b116b9",
+      "shard": "sha256:d615d296b512961666f913437840c7fb540a61ab1714074b2512808869ad6d46"
+    },
+    {
+      "id": "net/http",
+      "origin": "stdlib",
+      "content_hash": "sha256:2a0443ceed08a744626e687031aebad33f69b7c78542d46c8b073cf08707d671",
+      "shard": "sha256:e770860ef9e3a13e5233bdbaa793a9eba17356d5410cafc40df1823faabf0854"
+    },
+    {
+      "id": "net/http/httptrace",
+      "origin": "stdlib",
+      "content_hash": "sha256:9eb824b2ba68d1e1d7e1e0550acc0cb2a2e9d99b5bb9a4f3d65b35f37c02dbaf",
+      "shard": "sha256:98d7a480682140a08447a30e01bc0a44bfa8241c3999793d50a4723e9f796d71"
+    },
+    {
+      "id": "net/http/internal",
+      "origin": "stdlib",
+      "content_hash": "sha256:d290effe81c45d0efe5f242d3eb7dcf80985b903f6781ccf5e962577dafc5bb7",
+      "shard": "sha256:15668c1efdabc9521bad09a87b3cc5423f44851a978c3fcb8ee234e99c3c40b3"
+    },
+    {
+      "id": "net/http/internal/ascii",
+      "origin": "stdlib",
+      "content_hash": "sha256:5dd68a174cd0bc9ffd2561e3dee326267d3555ac7e78520927380517cfcc972b",
+      "shard": "sha256:0da3f0acc077378044cfaa6c99d7054e60d6236f8878d2d24b4027db0db708b3"
+    },
+    {
+      "id": "net/http/internal/httpcommon",
+      "origin": "stdlib",
+      "content_hash": "sha256:63e1a5f6194a8dd81da7feda263b465fdd9598045176a3ef91c435a00221b2f1",
+      "shard": "sha256:de2d219fe906dabcf0374a08af864f724cc844fbf61ed049f615bf8653d2b760"
+    },
+    {
+      "id": "net/netip",
+      "origin": "stdlib",
+      "content_hash": "sha256:0e59875d2fea5beec00cfe8a12fbf47e55f87ba4bd978b961260c27277815ace",
+      "shard": "sha256:e499a5a9c2c29a75975f820da57ab4e7c000f57c1bea277c40d476e823b2dde5"
+    },
+    {
+      "id": "net/textproto",
+      "origin": "stdlib",
+      "content_hash": "sha256:d519aaa2e43a1f3bc49656c6859640b818d6914ba0831ebd4ddff63203f7c79d",
+      "shard": "sha256:acfbd4b46b0be12f2d0093cad087c10a9b768bf0d9e3b525ed3342e4f57284d5"
+    },
+    {
+      "id": "net/url",
+      "origin": "stdlib",
+      "content_hash": "sha256:e190374ac1c94feb21462f65df3979305ae2e8f8876cdb94439bfe8622b743c3",
+      "shard": "sha256:f08aaa37337bc74e79a03723a91f8d7bf3820ff88abd4485a5142c29173d4f80"
+    },
+    {
+      "id": "os",
+      "origin": "stdlib",
+      "content_hash": "sha256:85203b7237ed249c6fb67a2d921a89995e90b0b2f3a4e81ff587704ba78b0b4d",
+      "shard": "sha256:9a1824e616cb24ed4aa17f829eb70381b01b8f7ac3bee2bc9de5c6f46b4acb69"
+    },
+    {
+      "id": "path",
+      "origin": "stdlib",
+      "content_hash": "sha256:82b5436b1ff70e93abb0e60977ec4c3e1ecc80e142b2d33988fbce447d3f8723",
+      "shard": "sha256:336ba5626f90eb43e689eba53120ae0f15233403e560515d66c7e06df143312a"
+    },
+    {
+      "id": "path/filepath",
+      "origin": "stdlib",
+      "content_hash": "sha256:6696677cf87fe6cd9be69ce6c6a67cc4f79d654b32f4efe3ae98d5f7901b6850",
+      "shard": "sha256:96886ab9fcd71e7960543463848b903ea5f48ec755b0f7bff582f7037b182d25"
+    },
+    {
+      "id": "reflect",
+      "origin": "stdlib",
+      "content_hash": "sha256:7e7051c4ea9750d40adbfe51dc457e2a61509914fe9d615605765f8bc9455d4c",
+      "shard": "sha256:2821cd5979c878386571aba7bc15cfaf44acb3d7cb45c9f6f47cebba16aa0fa4"
+    },
+    {
+      "id": "regexp",
+      "origin": "stdlib",
+      "content_hash": "sha256:e15c04df27e6fb07937ce49815fd0fa46c6bb355c0ca005a815a78766f81e952",
+      "shard": "sha256:a05b09362d1ca6cc63bc409639fa5c7f2536b853ae650230ed6470b0fcba9094"
+    },
+    {
+      "id": "regexp/syntax",
+      "origin": "stdlib",
+      "content_hash": "sha256:9acfab130a2cde2152e974e3e25e665703fb43cf1963ad6b71b334b9444fbb9a",
+      "shard": "sha256:b954a6b46618d7207504b64768292c50352c0d7da6850c84dcf0aa551aab6586"
+    },
+    {
+      "id": "runtime",
+      "origin": "stdlib",
+      "content_hash": "sha256:4b77dd62bbca66fe5759b2f04605fabe274e73042705f86160fcf307f2e9700b",
+      "shard": "sha256:c2c855a1ae5a4af305bb78a51b2547a4a5506076f55c3e5093dbd01c72d13ab4"
+    },
+    {
+      "id": "slices",
+      "origin": "stdlib",
+      "content_hash": "sha256:a97ea8c0e534b827a64064b43f7e30d2c1ec3f524a9bcff871965dcc90f016f4",
+      "shard": "sha256:f28407bf5c46f81a1c5b9729eab5f4865a6535e21214b5d98877838702482e02"
+    },
+    {
+      "id": "sort",
+      "origin": "stdlib",
+      "content_hash": "sha256:50c61ea08ddcc775896e52f82bf00e2d07199866178e628ebd8079709451e585",
+      "shard": "sha256:04101684ddc375ad7a7cdc5266dfed6b39b849c0a288f756bab1d7165a6544b8"
+    },
+    {
+      "id": "strconv",
+      "origin": "stdlib",
+      "content_hash": "sha256:e8d149063425c8c561c1538b0838e6f212c9805e48c7115e24ab0c811a4acb17",
+      "shard": "sha256:440c7dc8ea61587a56ea4914ec5f4f861e538aab89a4b755116e415d50c04aac"
+    },
+    {
+      "id": "strings",
+      "origin": "stdlib",
+      "content_hash": "sha256:e79f784ea43ac3dab571ec5d07334552e65e397e3ce53f23a94b766d3d5cd28b",
+      "shard": "sha256:e45f7f9336286e5d83f093e711a3653897ce7a0f35ed6f81e1ff4cc99c11c568"
+    },
+    {
+      "id": "sync",
+      "origin": "stdlib",
+      "content_hash": "sha256:9fb654edb57ba641497bf413f3698dcaa1583199a5ce93b0a6e2819268285c6a",
+      "shard": "sha256:0d75147ee70d07d997778c38c425a5f4da9ddf95dd2d441454f5c9b58358bd35"
+    },
+    {
+      "id": "sync/atomic",
+      "origin": "stdlib",
+      "content_hash": "sha256:0f6f0d2cb24d7f19616444ea4fb11b4cebbaee7337c73a918aa8387500db0577",
+      "shard": "sha256:50f199159832bef1c3ab13ddb7b6b55cb79f7e69c927adba67a5830b7cbcdfd0"
+    },
+    {
+      "id": "syscall",
+      "origin": "stdlib",
+      "content_hash": "sha256:e024e62276c20e68ed3ad1e7e069fd026018c01cb9f0531f051e19ca2377f0cd",
+      "shard": "sha256:f6a67f5d847dde2f450ac0571869776a6d6628aea999665c6ec69e0b29df4895"
+    },
+    {
+      "id": "time",
+      "origin": "stdlib",
+      "content_hash": "sha256:c23956eb95b94129069430b471dc896f48ecc1b3d558face41eea3b7a84a84a2",
+      "shard": "sha256:578b2fff20dc116c5c9fb65fdcb51a1bcf3fc9ca68f0d3fea88b8edee2e931a5"
+    },
+    {
+      "id": "unicode",
+      "origin": "stdlib",
+      "content_hash": "sha256:bbfec6c96119db06b027818709b3f4cc877a06a2805e9252945a67a4a784531a",
+      "shard": "sha256:67bf1843ecae4007641893b6b32aab2700c36bef0cf0e7de0cbd6238d1c352e7"
+    },
+    {
+      "id": "unicode/utf16",
+      "origin": "stdlib",
+      "content_hash": "sha256:5f7e6c3da2a4283bb34561d6d81093d87c68862429a56989c678c9ccbdab41b9",
+      "shard": "sha256:c39fa4c4571be1239cef42a639f9627efd2b5756b26379ea87cfb3760b08dcff"
+    },
+    {
+      "id": "unicode/utf8",
+      "origin": "stdlib",
+      "content_hash": "sha256:db5a889514519301f9a519a999ffff62fc179a49512ece5cde0729dc34c9479a",
+      "shard": "sha256:b0e4c7239e98736964924354c9d39c025086d479e1780e3ac51205a21257c418"
+    },
+    {
+      "id": "unique",
+      "origin": "stdlib",
+      "content_hash": "sha256:f04153a18edc4fd98c3b48854112d069aec14e6f57e23c562cbf124d85156f10",
+      "shard": "sha256:fe891c866c21cacb3d14a35f746db55e140523270fa8d8a3a306a79f43daee32"
+    },
+    {
+      "id": "unsafe",
+      "origin": "stdlib",
+      "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "shard": "sha256:52c95abec59e1164c509d45a9f04cf9935686628dfb4de30cafd9e648191df83"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/chacha20",
+      "origin": "stdlib",
+      "content_hash": "sha256:572c40edc876a904bce404b783931b69fbc0d7e018047980877bf25c1dab41c6",
+      "shard": "sha256:d19dc9ddc996d06bef32562cc673a984332b8c68c1407f2cd35be4f26b8bd631"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/chacha20poly1305",
+      "origin": "stdlib",
+      "content_hash": "sha256:b47ba67c29c3e34426513a0daa239668b289eb15b5ff72004452cd638844944e",
+      "shard": "sha256:b57264cba82cb3c75a5c8af3ace0cf6ad20bac1412f26365a6e98af73a5bcc45"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/cryptobyte",
+      "origin": "stdlib",
+      "content_hash": "sha256:31998c77aabdf305f2da49fb9cb40fc877a168ab0cac57c764b8363f897e35e7",
+      "shard": "sha256:54f13cb871fadbcfb3015dfc49114b16bd0f60a8c14704f537af201f2b4f8bd4"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/cryptobyte/asn1",
+      "origin": "stdlib",
+      "content_hash": "sha256:09124b7b804921ac2d55fc44ba664ff06d9249b660df643de694d294e0bc6496",
+      "shard": "sha256:217f9be5247130f3a6c1f1329199c75cc7a79c8aed837a8e9f637625bb8ff657"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/internal/alias",
+      "origin": "stdlib",
+      "content_hash": "sha256:1c8c8914e8d1825c6d4e9cfe80be51874792b8c78200d37ac6fa24a697c2bcbd",
+      "shard": "sha256:fa600ec1d276947e706c4c35aaf07d50c81c2f105b02251de099c0e6032a54af"
+    },
+    {
+      "id": "vendor/golang.org/x/crypto/internal/poly1305",
+      "origin": "stdlib",
+      "content_hash": "sha256:e4b7f34746f9159747eda7c1abe67efd8376f6773df37bd414f6146b6497959c",
+      "shard": "sha256:e38598fdcd06f6aa6f6afdba746576df2757048c5a66c344fe0d29694ed9f694"
+    },
+    {
+      "id": "vendor/golang.org/x/net/dns/dnsmessage",
+      "origin": "stdlib",
+      "content_hash": "sha256:d623b35742b9f17a4ab054b4b44fedb6f9fec1dd0651d041a143565acaee1d21",
+      "shard": "sha256:a78341a72f68803d9143cb391b822903d656441283b5550d301af6f863096d13"
+    },
+    {
+      "id": "vendor/golang.org/x/net/http/httpguts",
+      "origin": "stdlib",
+      "content_hash": "sha256:52d466c461c50e41d6da351baa18c953e15ba54654b07810d08041482b3d7b69",
+      "shard": "sha256:8d4e6a8916d4bd85d52c76ffad652349efe5f1da86e336793439a39169ad3e78"
+    },
+    {
+      "id": "vendor/golang.org/x/net/http/httpproxy",
+      "origin": "stdlib",
+      "content_hash": "sha256:e90cd95f1647904c502581499ecca45b7cf4dfff088df5876c2acf3fc182e0ba",
+      "shard": "sha256:02af9fa9da00d23e6c490df0976aa3795ddeb9327220757fbde4616c3de970ce"
+    },
+    {
+      "id": "vendor/golang.org/x/net/http2/hpack",
+      "origin": "stdlib",
+      "content_hash": "sha256:8eb0692555c5a70aa302ed7cc86bc2c7c85485f7ceafa1ef7524c11cd6089e9f",
+      "shard": "sha256:9c978ebc568b78273d81a89630692573b11fdc63837e2505972a853b78a87e99"
+    },
+    {
+      "id": "vendor/golang.org/x/net/idna",
+      "origin": "stdlib",
+      "content_hash": "sha256:aa2184a3f5d943fe80dadee23027366ef7b39dd2982dbd229954504eecf321e6",
+      "shard": "sha256:6ce8b1d1aee59889272ceea0695a88f9fcae3c41fac6d5273dc9e8d8a85bc926"
+    },
+    {
+      "id": "vendor/golang.org/x/sys/cpu",
+      "origin": "stdlib",
+      "content_hash": "sha256:8677718b367cca1519a05704b35b8b4772cc0feb6bcdb1e32198e4c331cb4610",
+      "shard": "sha256:a4994b46bfb9fb9bc2745edc9d71db1c77fe530cd6fa07dc765038b3b735c869"
+    },
+    {
+      "id": "vendor/golang.org/x/text/secure/bidirule",
+      "origin": "stdlib",
+      "content_hash": "sha256:4a3538372ad91fe740827a1b646170144667a4820cb95baa5f10ddd7b4ab24b8",
+      "shard": "sha256:e44eaf54dc258d5b78aa9303698061db155e7d8dc41b80f59a65579ab9b0f89b"
+    },
+    {
+      "id": "vendor/golang.org/x/text/transform",
+      "origin": "stdlib",
+      "content_hash": "sha256:fe0a24da601c031b0100175486822ea68f02c68869e50f8410d624c43948682a",
+      "shard": "sha256:8cfc978bd0ca4dee650909bf5718f3fcdf9d5581f8aabf78c386ea178aa15e1c"
+    },
+    {
+      "id": "vendor/golang.org/x/text/unicode/bidi",
+      "origin": "stdlib",
+      "content_hash": "sha256:529c20bf8401dfa45b93037e16f4062fa790dbb25bf0b09d1923da46482f3b3f",
+      "shard": "sha256:f11521896db0936e0be9464d9409381f98de67ddc017303d22bd407a93a180e5"
+    },
+    {
+      "id": "vendor/golang.org/x/text/unicode/norm",
+      "origin": "stdlib",
+      "content_hash": "sha256:2b0009e022b47ff8141144dbec7c12fed8bf8ff4fc88c2ed391a0c368cc6333a",
+      "shard": "sha256:ef5e8909e2ddb88d4d0a28e776ec4d7b43d104ec558b5c959a99ce43336d9e9f"
+    },
+    {
+      "id": "weak",
+      "origin": "stdlib",
+      "content_hash": "sha256:f575f1e4de054a3ded58dfacec394085c1b528ca9d8c141d1bd5b6d87ecdde99",
+      "shard": "sha256:b700e772e92aaf905336c3e17430b62caa66b266f8092517d427743369c09e6d"
+    }
+  ],
+  "excluded_packages": [],
+  "entry": {
+    "count": 4637,
+    "digest": "sha256:c05639232a53fcdaa89424c583d4373f5218ac378cb4fa420b199f223fad1ad6"
+  },
+  "global_diagnostics": []
+}

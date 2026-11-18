@@ -1,0 +1,10 @@
+# Trust boundary (plan section 9, parent spec invariant 2). Changes to policy,
+# packs, CI workflows, the approved auth middleware, or this file need owner review.
+/.bedrock/                      @LavishGent
+/packs/                         @LavishGent
+/.github/workflows/             @LavishGent
+/.github/CODEOWNERS             @LavishGent
+
+# Approved middleware implementation (concept auth.middleware) and its
+# private internals, in every demo state.
+/demo/*/internal/auth/          @LavishGent

@@ -1,0 +1,1384 @@
+{
+  "schema_version": "0.4",
+  "kind": "unit_shard",
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "unit": {
+    "id": "example.com/demo/internal/handler",
+    "lang": "go",
+    "origin": "module",
+    "module": "example.com/demo",
+    "dir": "internal/handler",
+    "source_status": "compiled",
+    "files": [
+      {
+        "path": "internal/handler/handler.go",
+        "sha256": "sha256:af7d307f4e4255073f2af743f35683799236ed08a75f8b2863bc7dad1fdc075f"
+      }
+    ],
+    "excluded_files": [],
+    "content_hash": "sha256:f5fa161d4a9a57f545bfb75dd43d15ed34c854a7a24fb4ee5e8b21619641347f",
+    "dep_hashes": [
+      {
+        "unit_id": "context",
+        "content_hash": "sha256:8f937805b4d2ecdbcbcc01b0820fe1ecd374c87d4b96e754f9b8b247093d2893"
+      },
+      {
+        "unit_id": "database/sql",
+        "content_hash": "sha256:0abfe267a61695b8e9f66e5dd3b097ec043eaa357ef7e8afd6c99f80739b73a7"
+      },
+      {
+        "unit_id": "encoding/json",
+        "content_hash": "sha256:54df84fdedca8447f336d53878192a9fdc1ed91aff190e96145834fd2fc98835"
+      },
+      {
+        "unit_id": "example.com/demo/internal/billing",
+        "content_hash": "sha256:207a882370033dc6c372c262d95912d5f1e597cf93ff4be84b2028ed65a5e2bd"
+      },
+      {
+        "unit_id": "example.com/demo/internal/repo",
+        "content_hash": "sha256:bd29b58f358019e4cd5c209934417fe2699c60cd2294a9a2d172cd249c9a2421"
+      },
+      {
+        "unit_id": "net/http",
+        "content_hash": "sha256:2a0443ceed08a744626e687031aebad33f69b7c78542d46c8b073cf08707d671"
+      }
+    ]
+  },
+  "symbols": [
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "AdminUsers",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 84,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "AdminUsers$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "BillingSummary",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 69,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "BillingSummary$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "CreateItem",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 52,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "CreateItem$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "Export",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 94,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "Export$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).Export",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Healthz",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "Healthz",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 37,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Healthz$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "Healthz$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).Healthz",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "method",
+      "name": "ListItems",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 42,
+        "column": 20
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems$bound",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "wrapper",
+      "name": "ListItems$bound",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "wrapper_kind": "bound",
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": true
+      },
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.Handlers",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "type",
+      "name": "Handlers",
+      "exported": true,
+      "has_body": false,
+      "in_universe": false,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 23,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.New",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "func",
+      "name": "New",
+      "exported": true,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 29,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.Store",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "type",
+      "name": "Store",
+      "exported": true,
+      "has_body": false,
+      "in_universe": false,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 16,
+        "column": 6
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.init",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "func",
+      "name": "init",
+      "exported": false,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": true,
+        "address_taken": false
+      },
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.writeJSON",
+      "unit_id": "example.com/demo/internal/handler",
+      "kind": "func",
+      "name": "writeJSON",
+      "exported": false,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 31,
+        "column": 6
+      }
+    }
+  ],
+  "external_symbols": [
+    {
+      "id": "(*database/sql.DB).QueryContext",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "(*database/sql.Rows).Close",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "(*database/sql.Rows).Next",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "(*database/sql.Rows).Scan",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "(*encoding/json.Decoder).Decode",
+      "unit_id": "encoding/json"
+    },
+    {
+      "id": "(*encoding/json.Encoder).Encode",
+      "unit_id": "encoding/json"
+    },
+    {
+      "id": "(*example.com/demo/internal/repo.Store).CreateItem",
+      "unit_id": "example.com/demo/internal/repo"
+    },
+    {
+      "id": "(*example.com/demo/internal/repo.Store).ListItems",
+      "unit_id": "example.com/demo/internal/repo"
+    },
+    {
+      "id": "(*example.com/demo/internal/repo.Store).ListUsers",
+      "unit_id": "example.com/demo/internal/repo"
+    },
+    {
+      "id": "(*net/http.Request).Context",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.http2responseWriter).Header",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.http2responseWriter).WriteHeader",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.response).Header",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.response).WriteHeader",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.timeoutWriter).Header",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(*net/http.timeoutWriter).WriteHeader",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "(net/http.Header).Set",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "context.init",
+      "unit_id": "context"
+    },
+    {
+      "id": "database/sql.init",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "encoding/json.NewDecoder",
+      "unit_id": "encoding/json"
+    },
+    {
+      "id": "encoding/json.NewEncoder",
+      "unit_id": "encoding/json"
+    },
+    {
+      "id": "encoding/json.init",
+      "unit_id": "encoding/json"
+    },
+    {
+      "id": "example.com/demo/internal/billing.Summarize",
+      "unit_id": "example.com/demo/internal/billing"
+    },
+    {
+      "id": "example.com/demo/internal/billing.init",
+      "unit_id": "example.com/demo/internal/billing"
+    },
+    {
+      "id": "example.com/demo/internal/repo.init",
+      "unit_id": "example.com/demo/internal/repo"
+    },
+    {
+      "id": "net/http.Error",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "net/http.init",
+      "unit_id": "net/http"
+    }
+  ],
+  "imports": [
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "context",
+      "to_path": "context",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 6,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "database/sql",
+      "to_path": "database/sql",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 7,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "encoding/json",
+      "to_path": "encoding/json",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 8,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "example.com/demo/internal/billing",
+      "to_path": "example.com/demo/internal/billing",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 11,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "example.com/demo/internal/repo",
+      "to_path": "example.com/demo/internal/repo",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 12,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/demo/internal/handler",
+      "to_unit": "net/http",
+      "to_path": "net/http",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 9,
+        "column": 2
+      }
+    }
+  ],
+  "call_sites": [
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 85,
+        "column": 43
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers#1",
+      "caller": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "ordinal": 1,
+      "mode": "invoke",
+      "callee_hint": "(example.com/demo/internal/handler.Store).ListUsers",
+      "targets": [
+        "(*example.com/demo/internal/repo.Store).ListUsers"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 85,
+        "column": 33
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers#2",
+      "caller": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 87,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers#3",
+      "caller": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/handler.writeJSON",
+      "targets": [
+        "example.com/demo/internal/handler.writeJSON"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 90,
+        "column": 11
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).AdminUsers$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).AdminUsers$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).AdminUsers",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).AdminUsers"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 70,
+        "column": 43
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#1",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 1,
+      "mode": "invoke",
+      "callee_hint": "(example.com/demo/internal/handler.Store).ListItems",
+      "targets": [
+        "(*example.com/demo/internal/repo.Store).ListItems"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 70,
+        "column": 33
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#2",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 72,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#3",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 75,
+        "column": 39
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#4",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 4,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/billing.Summarize",
+      "targets": [
+        "example.com/demo/internal/billing.Summarize"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 75,
+        "column": 29
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#5",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 77,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary#6",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "ordinal": 6,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/handler.writeJSON",
+      "targets": [
+        "example.com/demo/internal/handler.writeJSON"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 80,
+        "column": 11
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).BillingSummary$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).BillingSummary$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).BillingSummary",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).BillingSummary"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "encoding/json.NewDecoder",
+      "targets": [
+        "encoding/json.NewDecoder"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 57,
+        "column": 27
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#1",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "(*encoding/json.Decoder).Decode",
+      "targets": [
+        "(*encoding/json.Decoder).Decode"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 57,
+        "column": 42
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#2",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 58,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#3",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 61,
+        "column": 40
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#4",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 4,
+      "mode": "invoke",
+      "callee_hint": "(example.com/demo/internal/handler.Store).CreateItem",
+      "targets": [
+        "(*example.com/demo/internal/repo.Store).CreateItem"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 61,
+        "column": 30
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#5",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 62,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem#6",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "ordinal": 6,
+      "mode": "invoke",
+      "callee_hint": "(net/http.ResponseWriter).WriteHeader",
+      "targets": [
+        "(*net/http.http2responseWriter).WriteHeader",
+        "(*net/http.response).WriteHeader",
+        "(*net/http.timeoutWriter).WriteHeader"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 65,
+        "column": 15
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).CreateItem$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).CreateItem$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).CreateItem",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).CreateItem"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 95,
+        "column": 42
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#1",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "(*database/sql.DB).QueryContext",
+      "targets": [
+        "(*database/sql.DB).QueryContext"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 95,
+        "column": 32
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#2",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 97,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#3",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "(*database/sql.Rows).Close",
+      "targets": [
+        "(*database/sql.Rows).Close"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 100,
+        "column": 2
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#4",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 4,
+      "mode": "static",
+      "callee_hint": "(*database/sql.Rows).Scan",
+      "targets": [
+        "(*database/sql.Rows).Scan"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 104,
+        "column": 22
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#5",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/handler.writeJSON",
+      "targets": [
+        "example.com/demo/internal/handler.writeJSON"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 110,
+        "column": 11
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#6",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 6,
+      "mode": "static",
+      "callee_hint": "(*database/sql.Rows).Next",
+      "targets": [
+        "(*database/sql.Rows).Next"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 102,
+        "column": 15
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export#7",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export",
+      "ordinal": 7,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 105,
+        "column": 14
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Export$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Export$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).Export",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).Export"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Healthz#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Healthz",
+      "ordinal": 0,
+      "mode": "invoke",
+      "callee_hint": "(net/http.ResponseWriter).WriteHeader",
+      "targets": [
+        "(*net/http.http2responseWriter).WriteHeader",
+        "(*net/http.response).WriteHeader",
+        "(*net/http.timeoutWriter).WriteHeader"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 38,
+        "column": 15
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).Healthz$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).Healthz$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).Healthz",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).Healthz"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*net/http.Request).Context",
+      "targets": [
+        "(*net/http.Request).Context"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 43,
+        "column": 43
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems#1",
+      "caller": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "ordinal": 1,
+      "mode": "invoke",
+      "callee_hint": "(example.com/demo/internal/handler.Store).ListItems",
+      "targets": [
+        "(*example.com/demo/internal/repo.Store).ListItems"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 43,
+        "column": 33
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems#2",
+      "caller": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.Error",
+      "targets": [
+        "net/http.Error"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 45,
+        "column": 13
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems#3",
+      "caller": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/handler.writeJSON",
+      "targets": [
+        "example.com/demo/internal/handler.writeJSON"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 48,
+        "column": 11
+      }
+    },
+    {
+      "id": "(*example.com/demo/internal/handler.Handlers).ListItems$bound#0",
+      "caller": "(*example.com/demo/internal/handler.Handlers).ListItems$bound",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "(*example.com/demo/internal/handler.Handlers).ListItems",
+      "targets": [
+        "(*example.com/demo/internal/handler.Handlers).ListItems"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#0",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "context.init",
+      "targets": [
+        "context.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#1",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "database/sql.init",
+      "targets": [
+        "database/sql.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#2",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "encoding/json.init",
+      "targets": [
+        "encoding/json.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#3",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "net/http.init",
+      "targets": [
+        "net/http.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#4",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 4,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/billing.init",
+      "targets": [
+        "example.com/demo/internal/billing.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.init#5",
+      "caller": "example.com/demo/internal/handler.init",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "example.com/demo/internal/repo.init",
+      "targets": [
+        "example.com/demo/internal/repo.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/demo/internal/handler.writeJSON#0",
+      "caller": "example.com/demo/internal/handler.writeJSON",
+      "ordinal": 0,
+      "mode": "invoke",
+      "callee_hint": "(net/http.ResponseWriter).Header",
+      "targets": [
+        "(*net/http.http2responseWriter).Header",
+        "(*net/http.response).Header",
+        "(*net/http.timeoutWriter).Header"
+      ],
+      "resolution": "vta",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 32,
+        "column": 10
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.writeJSON#1",
+      "caller": "example.com/demo/internal/handler.writeJSON",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "(net/http.Header).Set",
+      "targets": [
+        "(net/http.Header).Set"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 32,
+        "column": 16
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.writeJSON#2",
+      "caller": "example.com/demo/internal/handler.writeJSON",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "encoding/json.NewEncoder",
+      "targets": [
+        "encoding/json.NewEncoder"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 33,
+        "column": 21
+      }
+    },
+    {
+      "id": "example.com/demo/internal/handler.writeJSON#3",
+      "caller": "example.com/demo/internal/handler.writeJSON",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "(*encoding/json.Encoder).Encode",
+      "targets": [
+        "(*encoding/json.Encoder).Encode"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "internal/handler/handler.go",
+        "line": 33,
+        "column": 31
+      }
+    }
+  ],
+  "routes": [],
+  "route_middleware": [],
+  "diagnostics": []
+}

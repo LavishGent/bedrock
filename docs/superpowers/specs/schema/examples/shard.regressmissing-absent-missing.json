@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.4",
+  "kind": "unit_shard",
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "unit": {
+    "id": "example.com/regressmissing/absent",
+    "lang": "go",
+    "origin": "module",
+    "module": "example.com/regressmissing",
+    "dir": "",
+    "source_status": "missing",
+    "files": [],
+    "excluded_files": [],
+    "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dep_hashes": []
+  },
+  "symbols": [],
+  "external_symbols": [],
+  "imports": [],
+  "call_sites": [],
+  "routes": [],
+  "route_middleware": [],
+  "diagnostics": [
+    {
+      "id": "diag:750d601e354b032b",
+      "kind": "package_load_error",
+      "severity": "error",
+      "scope": "unit",
+      "unit_id": "example.com/regressmissing/absent",
+      "symbol_id": null,
+      "site_id": null,
+      "message": "cannot find module providing package example.com/regressmissing/absent: import lookup disabled by -mod=readonly",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "user/user.go",
+        "line": 6,
+        "column": 8
+      }
+    }
+  ]
+}

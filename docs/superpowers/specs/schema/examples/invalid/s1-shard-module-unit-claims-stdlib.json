@@ -1,0 +1,446 @@
+{
+  "schema_version": "0.4",
+  "kind": "unit_shard",
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "unit": {
+    "id": "example.com/spike/cmd/server",
+    "lang": "go",
+    "origin": "stdlib",
+    "module": null,
+    "dir": "cmd/server",
+    "source_status": "compiled",
+    "files": [
+      {
+        "path": "cmd/server/main.go",
+        "sha256": "sha256:ac255047e133b6ec3fbcd3dcf7e138c4941a78d72fad17c08b8bbf7310a4afcc"
+      }
+    ],
+    "excluded_files": [],
+    "content_hash": "sha256:fa51b3bdc9bb73836be1a469256438bb0c811aab00beddff52575d20dedca0bb",
+    "dep_hashes": [
+      {
+        "unit_id": "database/sql",
+        "content_hash": "sha256:0abfe267a61695b8e9f66e5dd3b097ec043eaa357ef7e8afd6c99f80739b73a7"
+      },
+      {
+        "unit_id": "example.com/spike/internal/handler",
+        "content_hash": "sha256:02cc7dd851e483d5f224091b481a1064ee539c7bae3d4e682102b2194bfcb398"
+      },
+      {
+        "unit_id": "example.com/spike/internal/repo",
+        "content_hash": "sha256:6ec1d4148a85446b480625c588aac3ee92e9dc36b9514278f23a237fce655024"
+      },
+      {
+        "unit_id": "github.com/go-chi/chi/v5",
+        "content_hash": "sha256:894cf51ed4fbf351f23231342b8805bc8bed77a01c3e1df0b46e5af50ad9d02b"
+      },
+      {
+        "unit_id": "log",
+        "content_hash": "sha256:129fb845bdbb6c08cc1a3c56a555fc4f7a9b79a06fe5c4c2522e0b44230df58c"
+      },
+      {
+        "unit_id": "net/http",
+        "content_hash": "sha256:2a0443ceed08a744626e687031aebad33f69b7c78542d46c8b073cf08707d671"
+      }
+    ]
+  },
+  "symbols": [
+    {
+      "id": "example.com/spike/cmd/server.init",
+      "unit_id": "example.com/spike/cmd/server",
+      "kind": "func",
+      "name": "init",
+      "exported": false,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": true,
+        "address_taken": false
+      },
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.main",
+      "unit_id": "example.com/spike/cmd/server",
+      "kind": "func",
+      "name": "main",
+      "exported": false,
+      "has_body": true,
+      "in_universe": true,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": true,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 15,
+        "column": 6
+      }
+    }
+  ],
+  "external_symbols": [
+    {
+      "id": "(*example.com/spike/internal/handler.Items).Create",
+      "unit_id": "example.com/spike/internal/handler"
+    },
+    {
+      "id": "(*example.com/spike/internal/handler.Items).Create$bound",
+      "unit_id": "example.com/spike/internal/handler"
+    },
+    {
+      "id": "(*github.com/go-chi/chi/v5.Mux).Post",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "database/sql.Open",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "database/sql.init",
+      "unit_id": "database/sql"
+    },
+    {
+      "id": "example.com/spike/internal/handler.init",
+      "unit_id": "example.com/spike/internal/handler"
+    },
+    {
+      "id": "example.com/spike/internal/repo.New",
+      "unit_id": "example.com/spike/internal/repo"
+    },
+    {
+      "id": "example.com/spike/internal/repo.init",
+      "unit_id": "example.com/spike/internal/repo"
+    },
+    {
+      "id": "github.com/go-chi/chi/v5.NewRouter",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "github.com/go-chi/chi/v5.init",
+      "unit_id": "github.com/go-chi/chi/v5"
+    },
+    {
+      "id": "log.Fatal",
+      "unit_id": "log"
+    },
+    {
+      "id": "log.init",
+      "unit_id": "log"
+    },
+    {
+      "id": "net/http.ListenAndServe",
+      "unit_id": "net/http"
+    },
+    {
+      "id": "net/http.init",
+      "unit_id": "net/http"
+    }
+  ],
+  "imports": [
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "database/sql",
+      "to_path": "database/sql",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 5,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "example.com/spike/internal/handler",
+      "to_path": "example.com/spike/internal/handler",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 11,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "example.com/spike/internal/repo",
+      "to_path": "example.com/spike/internal/repo",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 12,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "github.com/go-chi/chi/v5",
+      "to_path": "github.com/go-chi/chi/v5",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 9,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "log",
+      "to_path": "log",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 6,
+        "column": 2
+      }
+    },
+    {
+      "from_unit": "example.com/spike/cmd/server",
+      "to_unit": "net/http",
+      "to_path": "net/http",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 7,
+        "column": 2
+      }
+    }
+  ],
+  "call_sites": [
+    {
+      "id": "example.com/spike/cmd/server.init#0",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "database/sql.init",
+      "targets": [
+        "database/sql.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.init#1",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "log.init",
+      "targets": [
+        "log.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.init#2",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "net/http.init",
+      "targets": [
+        "net/http.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.init#3",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "github.com/go-chi/chi/v5.init",
+      "targets": [
+        "github.com/go-chi/chi/v5.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.init#4",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 4,
+      "mode": "static",
+      "callee_hint": "example.com/spike/internal/handler.init",
+      "targets": [
+        "example.com/spike/internal/handler.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.init#5",
+      "caller": "example.com/spike/cmd/server.init",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "example.com/spike/internal/repo.init",
+      "targets": [
+        "example.com/spike/internal/repo.init"
+      ],
+      "resolution": "static",
+      "loc": null
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#0",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 0,
+      "mode": "static",
+      "callee_hint": "database/sql.Open",
+      "targets": [
+        "database/sql.Open"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 17,
+        "column": 21
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#1",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 1,
+      "mode": "static",
+      "callee_hint": "log.Fatal",
+      "targets": [
+        "log.Fatal"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 19,
+        "column": 12
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#2",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 2,
+      "mode": "static",
+      "callee_hint": "example.com/spike/internal/repo.New",
+      "targets": [
+        "example.com/spike/internal/repo.New"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 21,
+        "column": 37
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#3",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 3,
+      "mode": "static",
+      "callee_hint": "github.com/go-chi/chi/v5.NewRouter",
+      "targets": [
+        "github.com/go-chi/chi/v5.NewRouter"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 23,
+        "column": 20
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#4",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 4,
+      "mode": "static",
+      "callee_hint": "(*github.com/go-chi/chi/v5.Mux).Post",
+      "targets": [
+        "(*github.com/go-chi/chi/v5.Mux).Post"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 24,
+        "column": 8
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#5",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 5,
+      "mode": "static",
+      "callee_hint": "net/http.ListenAndServe",
+      "targets": [
+        "net/http.ListenAndServe"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 26,
+        "column": 31
+      }
+    },
+    {
+      "id": "example.com/spike/cmd/server.main#6",
+      "caller": "example.com/spike/cmd/server.main",
+      "ordinal": 6,
+      "mode": "static",
+      "callee_hint": "log.Fatal",
+      "targets": [
+        "log.Fatal"
+      ],
+      "resolution": "static",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 26,
+        "column": 11
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "route:example.com/spike/cmd/server:POST:/items#0",
+      "unit_id": "example.com/spike/cmd/server",
+      "router": "chi",
+      "method": "POST",
+      "path": "/items",
+      "pattern_raw": "/items",
+      "duplicate_index": 0,
+      "handler_sym": "(*example.com/spike/internal/handler.Items).Create",
+      "handler_value_sym": "(*example.com/spike/internal/handler.Items).Create$bound",
+      "registered_in": "example.com/spike/cmd/server.main",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": "cmd/server/main.go",
+        "line": 24,
+        "column": 8
+      }
+    }
+  ],
+  "route_middleware": [],
+  "diagnostics": []
+}

@@ -46,7 +46,7 @@ Bedrock uses a **Rust core engine** coordinating **native language analyzer work
         +-----------------------+       +-----------------------+
 ```
 
-### Target Monorepo Structure (`/Users/lavishgent/Desktop/bedrock`)
+### Target Monorepo Structure (repository root)
 
 - `crates/bedrock-dsl/` — Lexer, parser, AST, semantic validation, typechecker, and Datalog IR compiler.
 - `crates/bedrock-facts/` — Shared Semantic Fact Graph types, JSON IPC schema, shard hashing, and serialization.
@@ -97,7 +97,13 @@ Analyzers must emit `diagnostic` records whenever precision is compromised:
 - `unresolved_dynamic_call`: reflection, `eval`, or unresolvable function pointer inside a governed unit.
 - `unresolved_dynamic_url`: `http_call` whose URL path cannot be statically resolved (e.g., `fetch(base + dynamicPath)`).
 
+- `unresolved_dynamic_route`: a route registration whose path or handler cannot be statically resolved (e.g., routes built in loops or through helper functions the analyzer cannot follow).
+
 If a governed unit has any `error`-severity diagnostic—or an `unresolved_dynamic_*` diagnostic affecting an active invariant scope—the engine marks the run `INDETERMINATE` (exit `2`).
+
+**Definition of "affecting an active invariant scope":** a diagnostic affects an invariant when its `unit_id` is in that invariant's `scope`, **or** when the diagnostic's location lies in a symbol that is in the invariant's call-graph slice (any symbol that can reach, or be reached from, a symbol the invariant's prohibited/required pattern matches). Diagnostics in units outside every active invariant's scope and slice are reported as warnings and do not change the verdict.
+
+**Empty-match rule:** a `boundary(...)` or `concept(...)` reference that resolves to zero units/symbols/routes in the analyzed repository is a configuration error (`INDETERMINATE`), preventing a layout change from silently disabling an invariant.
 
 ---
 
@@ -136,7 +142,7 @@ symbols = ["backend/internal/auth.RequireAuth"]
 
 ### Built-In Framework Adapter Behavior
 
-- **`go-stdlib-sql`:** Binds `database/sql.(*DB).Query*`, `Exec*`, `Prepare*`, and `(*Tx).*` to `database.query`.
+- **`go-stdlib-sql`:** Binds the query, exec and prepare methods of `database/sql` `(*DB)`, `(*Tx)`, `(*Stmt)` and `(*Conn)` (`Query*`, `Exec*`, `Prepare*`, and `(*Stmt)` execution methods) to `database.query`. `Commit`, `Rollback` and other control methods are not bound. Other drivers and ORMs are unsupported unless bound explicitly.
 - **`go-chi` / `go-net-http`:** Extracts `r.Get/Post/Put/Delete/Route/Group` and `r.Use(...)` middleware chains, emitting `route` and `route_middleware` facts. Route groups mounted under `/internal` or annotated via binding `route_paths` receive `visibility = "internal"`.
 - **`ts-fetch` / `ts-axios`:** Extracts `fetch(...)` and `axios.*` calls. Constant template literals and known string constants resolve to `resolution = "literal"` with normalized paths; non-constant expressions emit `resolution = "dynamic"` plus a diagnostic.
 
@@ -207,6 +213,7 @@ invariant "frontend cannot call internal backend endpoints" {
 4. **IR Lowering:** Compiles AST invariants into a **Typed Relational / Datalog IR**:
    - Base EDB relations populated from `UnitShard` facts + materialized bindings (`in_boundary(UnitOrRoute, Boundary)`, `has_concept(Sym, Concept)`).
    - Derived IDB rules for call-path reachability (`call_reach(Caller, Callee)` is reflexive for symbols inside a boundary and transitive along `call` edges). A callsite `(Caller, Callee)` satisfies `unless reachable_from: B` when `Caller` is inside boundary `B` or every non-`B` call path reaching `Caller` traverses `B` (preventing bypass via shared helpers).
+   - **Formal definition of `reachable_from: B`.** Let `G` be the merged `call` graph, `In(B)` the symbols inside boundary `B`, and `Entry` the symbols with no incoming call edges plus all `route` handlers. A callsite with caller `c` satisfies the guard iff `c ∈ In(B)`, or every path in `G` from any `e ∈ Entry` to `c` contains at least one symbol in `In(B)`. If `c` is unreachable from every `Entry`, the guard is **not** satisfied (conservative). `Entry` is derived once from the final merged graph and held fixed while testing the graph with `B` removed; the guarantee is relative to that set. Over-approximated edges are not monotonically safe when `Entry` comes from indegree: a spurious edge into a symbol removes it from `Entry` and can turn a fail into a pass. Membership in `In(B)` is checked first, so an unreachable caller inside `B` passes. Where an `unresolved_dynamic_call` diagnostic exists on any path to `c`, the result is `INDETERMINATE`, not `PASS`.
    - Violation heads: `violation(RuleId, PrimaryLoc, RemediationId)` derived deterministically when prohibited patterns hold and exception/reachability guards fail.
 
 ---
@@ -222,18 +229,20 @@ invariant "frontend cannot call internal backend endpoints" {
 ### Incremental Module-Sharded Cache
 
 - Cache directory: `.bedrock/cache/` (gitignored, keyed by `analyzer_version + schema_version + unit_id`).
-- Cache key per unit: `sha256(unit_content_hash + sorted(direct_dep_hashes) + active_adapters)`.
+- Cache key per unit: `sha256(analyzer_binary_version + schema_version + unit_content_hash + sorted(direct_dep_hashes) + active_adapters)`.
 - On `bedrock check --diff <base>..<head>` (or `--changed <paths>`):
   1. Compute modified files via `git diff --name-only` (or explicit path list).
   2. Map changed files to owning `unit` IDs, then compute transitive reverse-dependent units from the cached `import` graph.
   3. Re-run `bedrock-analyzer-go` / `bedrock-analyzer-ts` **only** on dirty units + reverse dependents; read unmodified units from cached `UnitShard` JSON files.
-  4. Merge all shards into the full repository Semantic Fact Graph and run the fixed-point Datalog evaluator—guaranteeing exactness for global `reachable_from` and cross-service rules.
+  4. Merge all shards into the full repository Semantic Fact Graph and run the fixed-point Datalog evaluator. Exactness for global `reachable_from` and cross-service rules holds only if global call inference is recomputed or its true dependencies are tracked (see the known limitation below).
+- **Known limitation (to resolve before the cache is built):** Go call facts come from whole-program VTA analysis. A change in one package can alter outgoing indirect-call edges of an unchanged dependency (for example a callback passed into a helper), so reverse-dependents alone do not guarantee exactness. Cache syntax- and type-local facts per unit, and recompute global call inference on every run, or track the real global dependencies.
 - If cache metadata is missing, corrupt, or `bindings.toml`/pack versions changed, fall back cleanly to full analysis.
 
 ### Exit Codes & JSON Report Format
 
 - Exit `0`: `PASS` — zero violations and zero fail-safe indeterminacies.
 - Exit `1`: `VIOLATION` — one or more policy violations detected.
+- Precedence: any violation gives `1`; otherwise any relevant indeterminacy gives `2`; otherwise `0`. All diagnostics are reported in every case.
 - Exit `2`: `INDETERMINATE` — parse/type failure, worker crash, invalid policy/binding config, or unresolved dynamic construct in governed scope.
 
 JSON output (`bedrock check --format json`):
@@ -281,7 +290,8 @@ JSON output (`bedrock check --format json`):
 
 - `.github/workflows/bedrock.yml` triggers on `pull_request`.
 - **Tamper Resistance:**
-  1. `.bedrock/**` and `.github/workflows/bedrock.yml` are protected in `.github/CODEOWNERS` requiring security/architecture maintainer review.
+  1. `.bedrock/**`, `packs/**`, and `.github/workflows/bedrock.yml` are protected in `.github/CODEOWNERS` requiring security/architecture maintainer review.
+  1a. The `bedrock` binary and analyzer workers are installed in CI from a pinned, checksummed release artifact, never built from the PR workspace. Packs are loaded from the base-branch policy bundle, not the PR tree.
   2. In CI, the workflow checks out the **base branch's** `.bedrock/` directory into a temporary policy bundle directory and runs `bedrock check --policy-dir <base-policy-dir>` against the PR workspace, ensuring an untrusted agent PR cannot modify rules or bindings to self-approve.
   3. On non-zero exit (`1` or `2`), CI uploads the JSON report artifact, renders violations in the GitHub Job Summary, and fails the required status check.
 
@@ -293,12 +303,12 @@ The `demo/` workspace proves end-to-end multi-language governance across a reali
 
 - **Backend (`demo/backend/`):** Go HTTP service (`chi` + `database/sql` / SQLite or stub driver) with:
   - `internal/repo/` (approved repository boundary)
-  - `internal/auth/` (approved `RequireAuth` middleware + `internal/auth/internal/` private subpackage)
+  - `internal/auth/` (approved `RequireAuth` middleware + `internal/auth/private/` subpackage that policy, not Go's `internal` rule, forbids other packages from importing; Go rejects cross-subtree imports of `internal/` directories, which would break package loading)
   - `internal/billing/`, `internal/handler/`, and route setup (`public`, `/api/v1/**`, `/internal/**`)
 - **Frontend (`demo/frontend/`):** TypeScript module calling backend endpoints via `fetch`.
 - **Four Deliberate Demo Violations (verified on a `demo-violating` fixture/state):**
   1. Handler executes `db.QueryContext(...)` directly instead of calling `internal/repo`.
-  2. `internal/billing` imports `internal/auth/internal` across a prohibited module boundary.
+  2. `internal/billing` imports `internal/auth/private`, which policy forbids outside `internal/auth/**`.
   3. `/api/v1/admin/users` route registered without `auth.RequireAuth` middleware.
   4. `demo/frontend/src/client.ts` invokes `fetch("/internal/export")` directly.
 - **Verification Loop:** Running `bedrock check --format json` detects all 4 violations with exact witness chains and remediation hints; applying the four corresponding fixes (moving query to `internal/repo`, using public `auth` API, wrapping route with `RequireAuth`, switching frontend to `/api/v1/export`) transitions `bedrock check` to `PASS` (`exit 0`).

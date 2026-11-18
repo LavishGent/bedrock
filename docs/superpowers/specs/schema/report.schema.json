@@ -1,0 +1,691 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bedrock.invalid/poc/0.4/report.schema.json",
+  "title": "Bedrock POC check report",
+  "description": "Output of `bedrock check --format json`. Verdict: any violation gives VIOLATION/1; otherwise any diagnostic with relevance global or indeterminate gives INDETERMINATE/2; otherwise PASS/0. Every diagnostic is listed in every case. Rules: README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "tool",
+    "status",
+    "exit_code",
+    "build_profile",
+    "policy",
+    "inputs",
+    "assumptions",
+    "summary",
+    "packages",
+    "rules",
+    "violations",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "kind": {
+      "const": "report"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "bedrock"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "VIOLATION",
+        "INDETERMINATE"
+      ]
+    },
+    "exit_code": {
+      "enum": [
+        0,
+        1,
+        2
+      ]
+    },
+    "build_profile": {
+      "$ref": "common.schema.json#/$defs/buildProfile"
+    },
+    "policy": {
+      "description": "sha256 is null when the policy file is missing (which is itself a global policy_missing diagnostic).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            }
+          ]
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "shard_count"
+      ],
+      "properties": {
+        "manifest_sha256": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            }
+          ]
+        },
+        "shard_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "assumptions": {
+      "description": "Relevance exemptions applied (policy contract section 7). Sorted by id, unique. When any restrict_concept_to_boundary rule is evaluated, both trusted_stdlib and no_possible_target are present, even with exempted_count 0; otherwise the array is empty. exempted_count equals the number of diagnostics whose exempted_by names the assumption.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "statement",
+          "exempted_count"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "trusted_stdlib",
+              "no_possible_target"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exempted_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "uniqueItems": true,
+      "maxItems": 2
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "violations",
+        "indeterminate_diagnostics",
+        "global_diagnostics",
+        "warning_diagnostics",
+        "units_analyzed",
+        "rules"
+      ],
+      "properties": {
+        "violations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indeterminate_diagnostics": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "global_diagnostics": {
+          "description": "Diagnostics with relevance global (run-level indeterminacy).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_diagnostics": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "units_analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rules": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "packages": {
+      "description": "Plan section 7: the report lists included and excluded packages and files.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "included",
+        "excluded",
+        "excluded_files"
+      ],
+      "properties": {
+        "included": {
+          "description": "Module units analyzed. Sorted, unique.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/unitId"
+          }
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "build_constraint",
+                  "test_only",
+                  "outside_module",
+                  "ignored_by_go",
+                  "load_error"
+                ]
+              }
+            }
+          },
+          "description": "Directories under the module root that hold Go files but are not analyzed, with the reason: build_constraint (no file builds under the profile), test_only (only _test.go files), outside_module (a nested module), ignored_by_go (testdata, or a name starting with . or _). Sorted by id."
+        },
+        "excluded_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "common.schema.json#/$defs/relPath"
+              },
+              "reason": {
+                "enum": [
+                  "build_constraint",
+                  "test_file",
+                  "cgo_disabled",
+                  "ignored_by_go"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "description": "One entry per configured policy rule, sorted by id; a rule whose kind this build cannot evaluate is still listed (INDETERMINATE through its rule_not_evaluated diagnostic). Empty only when the policy itself failed (policy_missing, policy_invalid, policy_no_rules).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ruleResult"
+      }
+    },
+    "violations": {
+      "description": "Sorted by (rule_id, location.file, location.line, location.column, id); null locations sort first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/violation"
+      }
+    },
+    "diagnostics": {
+      "description": "Every diagnostic from the manifest and all shards, plus evaluator diagnostics. Sorted by relevance (global, then indeterminate, then warning), then id.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reportDiagnostic"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "PASS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 0
+          },
+          "violations": {
+            "maxItems": 0
+          },
+          "summary": {
+            "properties": {
+              "violations": {
+                "const": 0
+              },
+              "indeterminate_diagnostics": {
+                "const": 0
+              },
+              "global_diagnostics": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "VIOLATION"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 1
+          },
+          "violations": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "INDETERMINATE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 2
+          },
+          "violations": {
+            "maxItems": 0
+          },
+          "summary": {
+            "properties": {
+              "violations": {
+                "const": 0
+              }
+            },
+            "anyOf": [
+              {
+                "properties": {
+                  "indeterminate_diagnostics": {
+                    "minimum": 1
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "global_diagnostics": {
+                    "minimum": 1
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ruleResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "violation_ids",
+        "diagnostic_ids"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/ruleId"
+        },
+        "kind": {
+          "$ref": "common.schema.json#/$defs/ruleKind"
+        },
+        "status": {
+          "enum": [
+            "PASS",
+            "VIOLATION",
+            "INDETERMINATE"
+          ],
+          "description": "VIOLATION if the rule has violations; else INDETERMINATE if it has diagnostic_ids or any global diagnostic exists; else PASS."
+        },
+        "violation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/violationId"
+          }
+        },
+        "diagnostic_ids": {
+          "description": "Diagnostics with relevance indeterminate that name this rule in affects_rules. Sorted, unique. Run-level (global) diagnostics are not listed per rule.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/diagnosticId"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "VIOLATION"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "violation_ids": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "INDETERMINATE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "violation_ids": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "PASS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "violation_ids": {
+                "maxItems": 0
+              },
+              "diagnostic_ids": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "violation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "rule_id",
+        "rule_kind",
+        "location",
+        "message",
+        "evidence_chain",
+        "remediation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/violationId"
+        },
+        "rule_id": {
+          "$ref": "common.schema.json#/$defs/ruleId"
+        },
+        "rule_kind": {
+          "$ref": "common.schema.json#/$defs/ruleKind"
+        },
+        "location": {
+          "$ref": "common.schema.json#/$defs/nullableLocation"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_chain": {
+          "description": "Ordered witness from an Entry (or the importing unit) to the offending fact.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "from",
+              "to",
+              "loc"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "entry",
+                  "route",
+                  "call",
+                  "import",
+                  "middleware_missing",
+                  "concept_binding"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "loc": {
+                "$ref": "common.schema.json#/$defs/nullableLocation"
+              }
+            }
+          }
+        },
+        "remediation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "message",
+            "suggest"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "suggest": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "reportDiagnostic": {
+      "allOf": [
+        {
+          "$ref": "common.schema.json#/$defs/diagnosticCore"
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "global"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "scope": {
+                "const": "global"
+              },
+              "affects_rules": {
+                "maxItems": 0
+              },
+              "exempted_by": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "indeterminate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "affects_rules": {
+                "minItems": 1
+              },
+              "exempted_by": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "warning"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "affects_rules": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "required": [
+        "relevance",
+        "affects_rules",
+        "exempted_by"
+      ],
+      "properties": {
+        "relevance": {
+          "description": "global: run-level indeterminacy (policy failure, analyzer abort, merge-integrity failure); scope must be global, affects_rules empty, and it drives the overall verdict to 2 directly. indeterminate: rule-specific uncertainty; affects_rules names each affected rule. warning: affects no rule (including exempted diagnostics).",
+          "enum": [
+            "global",
+            "indeterminate",
+            "warning"
+          ]
+        },
+        "affects_rules": {
+          "description": "Rules this diagnostic makes indeterminate, with the reason. Sorted by rule_id, unique rule_id. Non-empty iff relevance=indeterminate.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule_id",
+              "reason"
+            ],
+            "properties": {
+              "rule_id": {
+                "$ref": "common.schema.json#/$defs/ruleId"
+              },
+              "reason": {
+                "enum": [
+                  "policy_config",
+                  "unit_in_scope",
+                  "reachable_from_governed_entry",
+                  "route_registration",
+                  "middleware_chain",
+                  "not_evaluated"
+                ]
+              }
+            }
+          }
+        },
+        "exempted_by": {
+          "description": "The policy-contract section 7 assumption that exempted this diagnostic from restrict_concept_to_boundary relevance, or null. Attribution rules (README, Assumptions): trusted_stdlib requires unit_origin stdlib and unit_id in the pinned standard-library inventory; no_possible_target requires unit_origin module or dependency and a zero-target unresolved call site.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "trusted_stdlib",
+                "no_possible_target"
+              ]
+            }
+          ]
+        },
+        "unit_origin": {
+          "description": "Loader provenance of unit_id, copied from the owning shard's unit.origin (module, dependency or stdlib); null for global diagnostics. Optional in 0.3 for compatibility, but required on every diagnostic with a non-null exempted_by, because it is the evidence for the attribution. A validator cross-checks stdlib against the pinned standard-library inventory (stdlib-<go_version>.txt).",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "module",
+                "dependency",
+                "stdlib",
+                "unresolved"
+              ]
+            }
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

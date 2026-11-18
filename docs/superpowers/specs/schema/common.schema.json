@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bedrock.invalid/poc/0.4/common.schema.json",
+  "title": "Bedrock POC shared definitions",
+  "description": "Shared types for unit shards, the analysis manifest and the report. Identifier, ordering and integrity rules that JSON Schema cannot express are normative in README.md next to this file.",
+  "$defs": {
+    "schemaVersion": {
+      "description": "Schema version. A breaking change bumps the minor version while the POC is 0.x; readers reject any version they do not know.",
+      "const": "0.4"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "unitId": {
+      "description": "Go import path of the package (unit). Test packages are never units.",
+      "type": "string",
+      "pattern": "^[^\\s]+$"
+    },
+    "symbolId": {
+      "description": "Canonical symbol ID (README: Symbol IDs). Non-empty, no leading or trailing whitespace, no control characters.",
+      "type": "string",
+      "pattern": "^\\S(.*\\S)?$",
+      "not": {
+        "pattern": "[\\x00-\\x1f]"
+      }
+    },
+    "siteId": {
+      "description": "<caller symbol ID>#<ordinal>, ordinal = index of the call in SSA block/instruction order, builtins excluded.",
+      "type": "string",
+      "pattern": "^\\S(.*\\S)?#(0|[1-9][0-9]*)$"
+    },
+    "routeId": {
+      "description": "route:<unit ID>:<METHOD or *>:<normalized path, empty if unresolved>#<duplicate index>",
+      "type": "string",
+      "pattern": "^route:[^\\s:]+:([A-Za-z]+|\\*):[^\\s]*#(0|[1-9][0-9]*)$"
+    },
+    "diagnosticId": {
+      "type": "string",
+      "pattern": "^diag:[0-9a-f]{16}$"
+    },
+    "violationId": {
+      "type": "string",
+      "pattern": "^viol:[0-9a-f]{16}$"
+    },
+    "ruleId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "ruleKind": {
+      "enum": [
+        "forbid_import",
+        "require_middleware",
+        "restrict_concept_to_boundary"
+      ]
+    },
+    "relPath": {
+      "description": "Forward-slash path relative to the location root. No leading slash, no '.' or '..' segments.",
+      "type": "string",
+      "pattern": "^(?:[^/\\\\.][^/\\\\]*|\\.[^/\\\\.][^/\\\\]*)(?:/(?:[^/\\\\.][^/\\\\]*|\\.[^/\\\\.][^/\\\\]*))*$"
+    },
+    "location": {
+      "description": "A source position. root=repo: relative to the analyzed repository root. root=module: relative to the root of dependency module `module` (path@version). root=goroot: relative to $GOROOT/src. line and column are 1-based; column counts bytes (go/token).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "module",
+        "file",
+        "line",
+        "column"
+      ],
+      "properties": {
+        "root": {
+          "enum": [
+            "repo",
+            "module",
+            "goroot"
+          ]
+        },
+        "module": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[^\\s@]+@[^\\s@]+$"
+            }
+          ]
+        },
+        "file": {
+          "$ref": "#/$defs/relPath"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "if": {
+        "properties": {
+          "root": {
+            "const": "module"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "module": {
+            "type": "string"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "module": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "nullableLocation": {
+      "description": "null when the fact has no source position (synthetic wrappers, package initializers, generated code).",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/location"
+        }
+      ]
+    },
+    "buildProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goos",
+        "goarch",
+        "cgo_enabled",
+        "tags",
+        "go_version",
+        "x_tools_version"
+      ],
+      "properties": {
+        "goos": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goarch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cgo_enabled": {
+          "type": "boolean"
+        },
+        "tags": {
+          "description": "Sorted, unique.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.]+$"
+          }
+        },
+        "go_version": {
+          "type": "string",
+          "pattern": "^go[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "x_tools_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+"
+        }
+      }
+    },
+    "diagnosticKind": {
+      "enum": [
+        "package_load_error",
+        "parse_or_type_error",
+        "unsupported_layout",
+        "policy_missing",
+        "policy_invalid",
+        "policy_no_rules",
+        "empty_match",
+        "analyzer_crash",
+        "analyzer_timeout",
+        "analyzer_memory_limit",
+        "symbol_id_collision",
+        "unresolved_external_symbol",
+        "entry_mismatch",
+        "unresolved_dynamic_call",
+        "unresolved_interface_call",
+        "reflection_call",
+        "unsafe_pointer",
+        "bodyless_function",
+        "unresolved_dynamic_route",
+        "unsupported_router_form",
+        "unsupported_middleware_form",
+        "duplicate_route",
+        "rule_not_evaluated"
+      ]
+    },
+    "diagnosticCore": {
+      "description": "Open diagnostic shape; use `diagnostic` (closed) unless extending. A fact about lost precision or a failed step. scope=unit diagnostics live in the owning shard; scope=global diagnostics (policy, layout, crash, timeout, memory, merge integrity) live in the analysis manifest and are never owned by a shard.",
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "severity",
+        "scope",
+        "unit_id",
+        "symbol_id",
+        "site_id",
+        "message",
+        "loc"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/diagnosticId"
+        },
+        "kind": {
+          "$ref": "#/$defs/diagnosticKind"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "unit",
+            "global"
+          ]
+        },
+        "unit_id": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/unitId"
+            }
+          ]
+        },
+        "symbol_id": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/symbolId"
+            }
+          ]
+        },
+        "site_id": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/siteId"
+            }
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loc": {
+          "$ref": "#/$defs/nullableLocation"
+        }
+      },
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "global"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "unit_id": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "unit_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "diagnostic": {
+      "$ref": "#/$defs/diagnosticCore",
+      "unevaluatedProperties": false
+    }
+  }
+}

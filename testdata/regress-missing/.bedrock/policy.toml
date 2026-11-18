@@ -1,0 +1,18 @@
+# Regression fixture policy (Codex step 2 review, B2): the governed package
+# example.com/regressmissing/absent has a load error and no compiled files.
+version = 1
+module = "example.com/regressmissing"
+
+[boundary.all]
+packages = ["example.com/regressmissing/**"]
+
+[boundary.user]
+packages = ["example.com/regressmissing/user"]
+
+[[rule]]
+id = "no-user-import"
+kind = "forbid_import"
+scope = "all"
+target = "user"
+message = "Nothing may import example.com/regressmissing/user."
+remediation.message = "Remove the import."
