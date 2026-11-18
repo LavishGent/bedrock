@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.2/report.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.3/report.schema.json",
   "title": "Bedrock POC check report",
-  "description": "Output of `bedrock check --format json`. Verdict: any violation gives VIOLATION/1; otherwise any diagnostic with relevance=indeterminate gives INDETERMINATE/2; otherwise PASS/0. Every diagnostic is listed in every case. Rules: README.md.",
+  "description": "Output of `bedrock check --format json`. Verdict: any violation gives VIOLATION/1; otherwise any diagnostic with relevance global or indeterminate gives INDETERMINATE/2; otherwise PASS/0. Every diagnostic is listed in every case. Rules: README.md.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -111,7 +111,7 @@
       }
     },
     "assumptions": {
-      "description": "Analysis assumptions the verdict depends on, with how many diagnostics each one exempted. Sorted by id. Plan section 7 (owner decision A) requires trusted_stdlib to be listed whenever restrict_concept_to_boundary is evaluated.",
+      "description": "Relevance exemptions applied (policy contract section 7). Sorted by id, unique. When any restrict_concept_to_boundary rule is evaluated, both trusted_stdlib and no_possible_target are present, even with exempted_count 0; otherwise the array is empty. exempted_count equals the number of diagnostics whose exempted_by names the assumption.",
       "type": "array",
       "items": {
         "type": "object",
@@ -137,7 +137,9 @@
             "minimum": 0
           }
         }
-      }
+      },
+      "uniqueItems": true,
+      "maxItems": 2
     },
     "summary": {
       "type": "object",
@@ -145,6 +147,7 @@
       "required": [
         "violations",
         "indeterminate_diagnostics",
+        "global_diagnostics",
         "warning_diagnostics",
         "units_analyzed",
         "rules"
@@ -155,6 +158,11 @@
           "minimum": 0
         },
         "indeterminate_diagnostics": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "global_diagnostics": {
+          "description": "Diagnostics with relevance global (run-level indeterminacy).",
           "type": "integer",
           "minimum": 0
         },
@@ -241,7 +249,7 @@
       }
     },
     "rules": {
-      "description": "One entry per policy rule. Sorted by id.",
+      "description": "One entry per policy rule, sorted by id. Empty when the policy itself failed (policy_missing, policy_invalid, policy_no_rules): no rule was evaluated.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/ruleResult"
@@ -255,7 +263,7 @@
       }
     },
     "diagnostics": {
-      "description": "Every diagnostic from the manifest and all shards, plus evaluator diagnostics. Sorted by (relevance: indeterminate first, then warning), then id.",
+      "description": "Every diagnostic from the manifest and all shards, plus evaluator diagnostics. Sorted by relevance (global, then indeterminate, then warning), then id.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/reportDiagnostic"
@@ -285,6 +293,9 @@
                 "const": 0
               },
               "indeterminate_diagnostics": {
+                "const": 0
+              },
+              "global_diagnostics": {
                 "const": 0
               }
             }
@@ -331,11 +342,24 @@
             "properties": {
               "violations": {
                 "const": 0
-              },
-              "indeterminate_diagnostics": {
-                "minimum": 1
               }
-            }
+            },
+            "anyOf": [
+              {
+                "properties": {
+                  "indeterminate_diagnostics": {
+                    "minimum": 1
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "global_diagnostics": {
+                    "minimum": 1
+                  }
+                }
+              }
+            ]
           }
         }
       }
@@ -364,7 +388,8 @@
             "PASS",
             "VIOLATION",
             "INDETERMINATE"
-          ]
+          ],
+          "description": "VIOLATION if the rule has violations; else INDETERMINATE if it has diagnostic_ids or any global diagnostic exists; else PASS."
         },
         "violation_ids": {
           "type": "array",
@@ -374,7 +399,7 @@
           }
         },
         "diagnostic_ids": {
-          "description": "Diagnostics with relevance=indeterminate for this rule. Sorted, unique.",
+          "description": "Diagnostics with relevance indeterminate that name this rule in affects_rules. Sorted, unique. Run-level (global) diagnostics are not listed per rule.",
           "type": "array",
           "uniqueItems": true,
           "items": {
@@ -411,9 +436,6 @@
             "properties": {
               "violation_ids": {
                 "maxItems": 0
-              },
-              "diagnostic_ids": {
-                "minItems": 1
               }
             }
           }
@@ -529,23 +551,82 @@
       "allOf": [
         {
           "$ref": "common.schema.json#/$defs/diagnosticCore"
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "global"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "scope": {
+                "const": "global"
+              },
+              "affects_rules": {
+                "maxItems": 0
+              },
+              "exempted_by": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "indeterminate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "affects_rules": {
+                "minItems": 1
+              },
+              "exempted_by": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "relevance": {
+                "const": "warning"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "affects_rules": {
+                "maxItems": 0
+              }
+            }
+          }
         }
       ],
       "type": "object",
       "required": [
         "relevance",
-        "affects_rules"
+        "affects_rules",
+        "exempted_by"
       ],
       "properties": {
         "relevance": {
-          "description": "indeterminate: affects at least one rule and counts toward verdict 2. warning: affects no rule.",
+          "description": "global: run-level indeterminacy (policy failure, analyzer abort, merge-integrity failure); scope must be global, affects_rules empty, and it drives the overall verdict to 2 directly. indeterminate: rule-specific uncertainty; affects_rules names each affected rule. warning: affects no rule (including exempted diagnostics).",
           "enum": [
+            "global",
             "indeterminate",
             "warning"
           ]
         },
         "affects_rules": {
-          "description": "Rules this diagnostic makes indeterminate, with the reason. Sorted by rule_id, unique rule_id. Empty iff relevance=warning.",
+          "description": "Rules this diagnostic makes indeterminate, with the reason. Sorted by rule_id, unique rule_id. Non-empty iff relevance=indeterminate.",
           "type": "array",
           "items": {
             "type": "object",
@@ -560,7 +641,6 @@
               },
               "reason": {
                 "enum": [
-                  "global_failure",
                   "policy_config",
                   "unit_in_scope",
                   "reachable_from_governed_entry",
@@ -570,30 +650,23 @@
               }
             }
           }
+        },
+        "exempted_by": {
+          "description": "The policy-contract section 7 assumption that exempted this diagnostic from restrict_concept_to_boundary relevance, or null. Attribution rules (README): trusted_stdlib only for diagnostics owned by a standard-library unit; no_possible_target only for zero-target unresolved_interface_call/unresolved_dynamic_call sites outside the standard library.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "trusted_stdlib",
+                "no_possible_target"
+              ]
+            }
+          ]
         }
       },
-      "unevaluatedProperties": false,
-      "if": {
-        "properties": {
-          "relevance": {
-            "const": "warning"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "affects_rules": {
-            "maxItems": 0
-          }
-        }
-      },
-      "else": {
-        "properties": {
-          "affects_rules": {
-            "minItems": 1
-          }
-        }
-      }
+      "unevaluatedProperties": false
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2",
+  "schema_version": "0.3",
   "kind": "report",
   "tool": {
     "name": "bedrock",
@@ -20,25 +20,26 @@
     "sha256": "sha256:3565d922899a885f828ac3371f9efed1a7ca8a1ba9cae8ea2a8a2e21d06ccae4"
   },
   "inputs": {
-    "manifest_sha256": "sha256:05c100852246fa093685525eafbe0ed3963750e8e34240293f425091cb681a06",
+    "manifest_sha256": "sha256:92a93c17accaa71b5cc3b6728e7e36ffa6e5ce7026679f77a7b3d03f86710866",
     "shard_count": 6
   },
   "assumptions": [
     {
       "id": "no_possible_target",
-      "statement": "A non-static call with no possible target in the analyzed universe (VTA over the closed whole program) is not an unknown call.",
-      "exempted_count": 289
+      "statement": "A non-static call with no possible target in the analyzed universe (VTA over the closed whole program, cgo disabled) is not an unknown call.",
+      "exempted_count": 1
     },
     {
       "id": "trusted_stdlib",
-      "statement": "Unknown calls whose bodies are in the pinned go1.26.11 standard library are not counted (owner decision A, plan section 7).",
-      "exempted_count": 4410
+      "statement": "Unknown calls owned by the pinned go1.26.11 standard library are not counted (owner decision A, plan section 7; policy contract section 7).",
+      "exempted_count": 2
     }
   ],
   "summary": {
     "violations": 3,
     "indeterminate_diagnostics": 1,
-    "warning_diagnostics": 2,
+    "global_diagnostics": 0,
+    "warning_diagnostics": 5,
     "units_analyzed": 4,
     "rules": 3
   },
@@ -232,7 +233,28 @@
           "rule_id": "db-in-repo",
           "reason": "reachable_from_governed_entry"
         }
-      ]
+      ],
+      "exempted_by": null
+    },
+    {
+      "kind": "unresolved_dynamic_call",
+      "severity": "warning",
+      "scope": "unit",
+      "unit_id": "github.com/go-chi/chi/v5",
+      "symbol_id": "(*github.com/go-chi/chi/v5.Mux).Group",
+      "site_id": "(*github.com/go-chi/chi/v5.Mux).Group#1",
+      "message": "Call through func value fn has no possible target in the analyzed universe.",
+      "loc": {
+        "root": "module",
+        "module": "github.com/go-chi/chi/v5@v5.5.0",
+        "file": "mux.go",
+        "line": 271,
+        "column": 5
+      },
+      "id": "diag:276a1a24d9f26e54",
+      "relevance": "warning",
+      "affects_rules": [],
+      "exempted_by": "no_possible_target"
     },
     {
       "kind": "unsupported_layout",
@@ -251,7 +273,8 @@
       },
       "id": "diag:afd96e7935a555f3",
       "relevance": "warning",
-      "affects_rules": []
+      "affects_rules": [],
+      "exempted_by": null
     },
     {
       "kind": "duplicate_route",
@@ -270,7 +293,48 @@
       },
       "id": "diag:c9385cca0e69361c",
       "relevance": "warning",
-      "affects_rules": []
+      "affects_rules": [],
+      "exempted_by": null
+    },
+    {
+      "kind": "unresolved_interface_call",
+      "severity": "warning",
+      "scope": "unit",
+      "unit_id": "net/http",
+      "symbol_id": "(*net/http.conn).serve",
+      "site_id": "(*net/http.conn).serve#41",
+      "message": "Interface call (net/http.Handler).ServeHTTP has no VTA targets.",
+      "loc": {
+        "root": "goroot",
+        "module": null,
+        "file": "net/http/server.go",
+        "line": 2106,
+        "column": 34
+      },
+      "id": "diag:cf0da04e9149a052",
+      "relevance": "warning",
+      "affects_rules": [],
+      "exempted_by": "trusted_stdlib"
+    },
+    {
+      "kind": "bodyless_function",
+      "severity": "warning",
+      "scope": "unit",
+      "unit_id": "database/sql",
+      "symbol_id": "(*database/sql.DB).conn",
+      "site_id": "(*database/sql.DB).conn#3",
+      "message": "Call to bodyless function runtime.nanotime.",
+      "loc": {
+        "root": "goroot",
+        "module": null,
+        "file": "database/sql/sql.go",
+        "line": 1330,
+        "column": 21
+      },
+      "id": "diag:fc87141e897af96d",
+      "relevance": "warning",
+      "affects_rules": [],
+      "exempted_by": "trusted_stdlib"
     }
   ]
 }

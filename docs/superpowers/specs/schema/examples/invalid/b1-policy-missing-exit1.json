@@ -1,0 +1,58 @@
+{
+  "schema_version": "0.3",
+  "kind": "report",
+  "tool": {
+    "name": "bedrock",
+    "version": "0.0.0-poc"
+  },
+  "status": "INDETERMINATE",
+  "exit_code": 1,
+  "build_profile": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo_enabled": false,
+    "tags": [],
+    "go_version": "go1.26.11",
+    "x_tools_version": "v0.52.0"
+  },
+  "policy": {
+    "path": ".bedrock/policy.toml",
+    "sha256": null
+  },
+  "inputs": {
+    "manifest_sha256": null,
+    "shard_count": 0
+  },
+  "assumptions": [],
+  "summary": {
+    "violations": 0,
+    "indeterminate_diagnostics": 0,
+    "global_diagnostics": 1,
+    "warning_diagnostics": 0,
+    "units_analyzed": 0,
+    "rules": 0
+  },
+  "packages": {
+    "included": [],
+    "excluded": [],
+    "excluded_files": []
+  },
+  "rules": [],
+  "violations": [],
+  "diagnostics": [
+    {
+      "kind": "policy_missing",
+      "severity": "error",
+      "scope": "global",
+      "unit_id": null,
+      "symbol_id": null,
+      "site_id": null,
+      "message": ".bedrock/policy.toml not found; no rule can be evaluated.",
+      "loc": null,
+      "id": "diag:ee0e605b4940e97c",
+      "relevance": "global",
+      "affects_rules": [],
+      "exempted_by": null
+    }
+  ]
+}

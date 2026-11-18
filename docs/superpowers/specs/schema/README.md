@@ -1,9 +1,9 @@
-# Bedrock POC fact and report schema, version 0.2
+# Bedrock POC fact and report schema, version 0.3
 
 **Status:** Pinned in POC step 0 (plan `../2026-11-17-bedrock-poc-plan.md`, sections 3 and 8).
 **Scope:** The Go POC only. The parent spec's multi-language IPC (`../2026-11-15-bedrock-design.md`, section 3) stays the long-term target. This schema is the POC's concrete form of it.
 
-This README is normative. The JSON Schemas check structure. The rules below cover what JSON Schema cannot express: ordering, ID construction, ownership and referential integrity, hash recomputation and verdict consistency. `spike/schemacheck` checks both.
+This README is normative. The JSON Schemas check structure. The rules below cover what JSON Schema cannot express: ordering, ID construction, ownership and referential integrity, hash recomputation, verdict consistency and assumption attribution. `spike/schemacheck` checks both.
 
 ## Files
 
@@ -16,25 +16,27 @@ This README is normative. The JSON Schemas check structure. The rules below cove
 | `examples/shard.spike-cmd-server.json` | A real shard for `spike/target/cmd/server`. File hashes, content hash, dependency hashes and call-site ordinals come from the spike under the pinned profile. |
 | `examples/shard.illustrative-api.json` | A hand-written shard that exercises closures, generic instances, bound and pointer wrappers, duplicate routes, middleware, excluded files, null locations and a reflection call in module code. Hashes are placeholders. |
 | `examples/analysis.illustrative.json` | A manifest with a global diagnostic. The unit list is abbreviated. |
-| `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic and two warnings, showing precedence and affected-rule reporting. |
+| `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic, plain warnings and three exempted diagnostics. It shows precedence, affected-rule reporting, and assumption counts that reconcile with `exempted_by` attributions. |
+| `examples/report.policy-missing.json`, `report.policy-no-rules.json`, `report.policy-invalid.json` | Policy failures: one diagnostic with relevance `global`, `rules: []`, `INDETERMINATE`, exit 2. |
+| `examples/invalid/*.json` | Negative fixtures. Each must be rejected with the error text recorded in `examples/invalid/expect.json`. |
 
-Validate everything (from the repo root):
+Validate everything (from the repo root). The test accepts every `examples/*.json` and rejects every `examples/invalid/*.json` for its recorded reason:
 
 ```sh
-S=docs/superpowers/specs/schema; E=$S/examples
-go run ./spike/schemacheck $S \
-  shard.schema.json=$E/shard.spike-cmd-server.json \
-  shard.schema.json=$E/shard.illustrative-api.json \
-  analysis.schema.json=$E/analysis.illustrative.json \
-  report.schema.json=$E/report.illustrative.json
+go test ./spike/schemacheck
+go run ./spike/schemacheck docs/superpowers/specs/schema docs/superpowers/specs/schema/examples/*.json   # one-off, schema chosen by kind
 ```
 
 ## Versioning
 
-Every document has `"schema_version": "0.2"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.2/`. They are identifiers, not fetchable URLs.
+Every document has `"schema_version": "0.3"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.3/`. They are identifiers, not fetchable URLs.
 
 Changelog:
 
+- **0.3** (step 1 review fixes). These changes are incompatible with 0.2:
+  - **B1, run-level indeterminacy.** Report diagnostics gain relevance `global` (with `scope: global`, empty `affects_rules`), which drives the verdict to 2 directly. `summary.global_diagnostics` is new. A policy failure means `rules: []`. The `global_failure` reason is removed from `affects_rules`.
+  - **S1, assumption attribution.** Report diagnostics gain the required `exempted_by`. When a `restrict_concept_to_boundary` rule is evaluated, both assumptions are listed, even with count 0. Counts must reconcile with `exempted_by`.
+  - **S4, method case.** Route methods may be lower case (net/http keeps the method as written).
 - **0.2** (step 1): the report gains the required `assumptions` array (`trusted_stdlib`, `no_possible_target`, each with `exempted_count`). Plan section 7 (owner decision A) requires the report to list the trusted-standard-library assumption and the count of calls it exempted. The relevance criteria themselves are defined in `../policy/README.md`.
 - **0.1** (step 0): initial version.
 
@@ -135,7 +137,8 @@ All arrays are sorted, and in an ID-keyed array the IDs are unique. Strings comp
 | manifest `units`, `excluded_packages` | `id` |
 | report `rules` | `id` |
 | report `violations` | `rule_id`, `location.file`, `location.line`, `location.column`, `id` |
-| report `diagnostics` | relevance (`indeterminate` first), then `id` |
+| report `diagnostics` | relevance (`global`, then `indeterminate`, then `warning`), then `id` |
+| report `assumptions` | `id` |
 | report `rules[].violation_ids`, `rules[].diagnostic_ids`, `packages.included` | the ID itself |
 | report `diagnostics[].affects_rules` | `rule_id` |
 
@@ -189,12 +192,25 @@ Entry = { s in all shards' symbols : s.in_universe
 - **Unit diagnostics** (`scope: unit`, `unit_id` set) live in the owning shard.
 - **Global diagnostics** (`scope: global`, `unit_id: null`) live in the manifest's `global_diagnostics`. They cover policy errors, unsupported layout, crash, timeout, memory limit and merge-integrity failures, and are never owned by a shard. Policy diagnostics come from the evaluator and appear only in the report.
 - **`severity`** is the analyzer's statement. `error` means the facts for that scope are incomplete, for example a load or type error or an abort. `warning` means precision was lost locally, as with an unresolved call, reflection, `unsafe` or a bodyless callee.
-- **`relevance`** appears only in the report and is decided by the evaluator under plan section 7. `indeterminate` means the diagnostic affects at least one rule and counts toward verdict 2. `warning` means it affects no rule.
-- **`affects_rules`** lists each affected rule with a reason: `global_failure`, `policy_config`, `unit_in_scope`, `reachable_from_governed_entry`, `route_registration` or `middleware_chain`. It is empty exactly when relevance is `warning`.
-- **Rule results**: `rules[].diagnostic_ids` lists the indeterminate diagnostics for each rule, including rules that also have violations.
-- **Verdict per rule**: `VIOLATION` if it has violations, else `INDETERMINATE` if it has diagnostics, else `PASS`.
-- **Overall verdict**: `VIOLATION`/1 if any violation exists, else `INDETERMINATE`/2 if any indeterminate diagnostic exists, else `PASS`/0. All diagnostics are always listed. The report example shows this: `VIOLATION` overall, with rule `db-in-repo` indeterminate.
-- **Assumptions**: the report's `assumptions` lists each relevance exemption that was applied (`trusted_stdlib`, `no_possible_target`) with the number of diagnostics it exempted. Exempted diagnostics are still listed, with relevance `warning`.
+- **`relevance`** appears only in the report and is decided by the evaluator under plan section 7. It takes one of three values:
+
+  | Relevance | Meaning | Constraints |
+  | --- | --- | --- |
+  | `global` | **Run-level** indeterminacy: the whole run cannot be trusted. Counts toward verdict 2 directly. | `scope: global`, empty `affects_rules`. Required for the run-level kinds: `policy_missing`, `policy_invalid`, `policy_no_rules`, `analyzer_crash`, `analyzer_timeout`, `analyzer_memory_limit`, `symbol_id_collision`, `unresolved_external_symbol`, `entry_mismatch`. |
+  | `indeterminate` | **Rule-specific** uncertainty. Counts toward verdict 2. | `affects_rules` names each affected rule. Example: `empty_match` on one rule's boundary. |
+  | `warning` | Affects no rule, including exempted diagnostics. | Empty `affects_rules`. |
+
+- **`affects_rules`** lists each affected rule with a reason: `policy_config`, `unit_in_scope`, `reachable_from_governed_entry`, `route_registration` or `middleware_chain`. It is non-empty exactly when relevance is `indeterminate`.
+- **Policy failures.** With `policy_missing`, `policy_invalid` or `policy_no_rules`, no rule is evaluated. The report has `rules: []`, `violations: []` and `assumptions: []`, status `INDETERMINATE`, exit 2. See the three `report.policy-*.json` examples.
+- **Rule results**: `rules[].diagnostic_ids` lists the `indeterminate` diagnostics that name the rule, including for rules that also have violations. Global diagnostics are not repeated per rule.
+- **Verdict per rule**: `VIOLATION` if it has violations; else `INDETERMINATE` if it has `diagnostic_ids` **or any global diagnostic exists**; else `PASS`. No rule is `PASS` in a run with a global diagnostic.
+- **Overall verdict**: `VIOLATION`/1 if any violation exists, else `INDETERMINATE`/2 if any `global` or `indeterminate` diagnostic exists, else `PASS`/0. A violation still wins over a global diagnostic, per the verdict table. All diagnostics are always listed. The illustrative report shows this: `VIOLATION` overall, with rule `db-in-repo` indeterminate.
+- **Assumptions (S1)**:
+  - **When listed.** `assumptions` is empty unless a `restrict_concept_to_boundary` rule is evaluated. Then it lists exactly `no_possible_target` and `trusted_stdlib`, sorted and unique, **even when a count is 0**.
+  - **Counts.** Each exempted diagnostic stays in `diagnostics` with relevance `warning` and `exempted_by` naming its assumption. `exempted_count` must equal the number of diagnostics carrying that `exempted_by`.
+  - **Attribution** is checkable from the diagnostic itself, using Go's rule that a standard-library import path has no dot in its first element (policy contract, section 7):
+    - `trusted_stdlib` requires an unknown-call kind on a standard-library `unit_id`;
+    - `no_possible_target` requires an `unresolved_interface_call` or `unresolved_dynamic_call` with a `site_id`, on a non-standard-library unit. A standard-library zero-target site is attributed to `trusted_stdlib`.
 - **Included and excluded scope**: the report lists included and excluded packages and files (plan section 7).
 
 ## Plan section 3 coverage
@@ -208,6 +224,6 @@ Entry = { s in all shards' symbols : s.in_universe
 | Shard ownership and referential integrity | Shard ownership section, enforced per shard by `schemacheck`. |
 | Source file list, content hash, dependency hashes | `unit.files`, `unit.content_hash`, `unit.dep_hashes`, recomputed by `schemacheck`. |
 | Function-entry metadata, recoverable `Entry` | `symbol.in_universe`, `kind`, `entry_hints`, `routes[].handler_sym`, `manifest.entry`. See Recovering Entry. |
-| Global diagnostics | `manifest.global_diagnostics`, `scope: global`. |
+| Global diagnostics | `manifest.global_diagnostics`, `scope: global`; report relevance `global` for run-level failures (B1). |
 | Affected-rule reporting | Report `diagnostics[].relevance` and `affects_rules`, `rules[].diagnostic_ids`. |
 | Included and excluded packages and files | Manifest `excluded_packages`, `unit.excluded_files`, report `packages`. |

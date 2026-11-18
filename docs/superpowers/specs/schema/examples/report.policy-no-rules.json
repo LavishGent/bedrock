@@ -1,0 +1,64 @@
+{
+  "schema_version": "0.3",
+  "kind": "report",
+  "tool": {
+    "name": "bedrock",
+    "version": "0.0.0-poc"
+  },
+  "status": "INDETERMINATE",
+  "exit_code": 2,
+  "build_profile": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo_enabled": false,
+    "tags": [],
+    "go_version": "go1.26.11",
+    "x_tools_version": "v0.52.0"
+  },
+  "policy": {
+    "path": ".bedrock/policy.toml",
+    "sha256": "sha256:0dc3f9b99f439f4972a2afb7ac72214c3f277f355bb9955607881d0518fee787"
+  },
+  "inputs": {
+    "manifest_sha256": null,
+    "shard_count": 0
+  },
+  "assumptions": [],
+  "summary": {
+    "violations": 0,
+    "indeterminate_diagnostics": 0,
+    "global_diagnostics": 1,
+    "warning_diagnostics": 0,
+    "units_analyzed": 0,
+    "rules": 0
+  },
+  "packages": {
+    "included": [],
+    "excluded": [],
+    "excluded_files": []
+  },
+  "rules": [],
+  "violations": [],
+  "diagnostics": [
+    {
+      "kind": "policy_no_rules",
+      "severity": "error",
+      "scope": "global",
+      "unit_id": null,
+      "symbol_id": null,
+      "site_id": null,
+      "message": "Policy defines no [[rule]] entries.",
+      "loc": {
+        "root": "repo",
+        "module": null,
+        "file": ".bedrock/policy.toml",
+        "line": 1,
+        "column": 1
+      },
+      "id": "diag:ae68304f26a97fe6",
+      "relevance": "global",
+      "affects_rules": [],
+      "exempted_by": null
+    }
+  ]
+}

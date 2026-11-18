@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.2/common.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.3/common.schema.json",
   "title": "Bedrock POC shared definitions",
   "description": "Shared types for unit shards, the analysis manifest and the report. Identifier, ordering and integrity rules that JSON Schema cannot express are normative in README.md next to this file.",
   "$defs": {
     "schemaVersion": {
       "description": "Schema version. A breaking change bumps the minor version while the POC is 0.x; readers reject any version they do not know.",
-      "const": "0.2"
+      "const": "0.3"
     },
     "sha256": {
       "type": "string",

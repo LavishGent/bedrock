@@ -210,7 +210,15 @@ Further details:
 | `reflection_call` | exempt (`trusted_stdlib`) | **relevant** |
 | `unsafe_pointer` | exempt (`trusted_stdlib`) | **relevant** |
 
-Every report that evaluates a `restrict_concept_to_boundary` rule lists both assumptions in `assumptions` (`../schema/README.md`, schema 0.2), each with its `exempted_count`. Exempted diagnostics remain in `diagnostics` with relevance `warning`. Changing the pinned Go version invalidates the trust until it is re-reviewed.
+Every report that evaluates a `restrict_concept_to_boundary` rule lists **both** assumptions in `assumptions` (`../schema/README.md`, schema 0.3), sorted and unique, each with its `exempted_count`. Both are listed even when a count is 0.
+
+Each exempted diagnostic remains in `diagnostics` with relevance `warning` and `exempted_by` naming the criterion. `exempted_count` is exactly the number of such diagnostics. Attribution must be checkable from the diagnostic:
+
+- `trusted_stdlib` applies only to an unknown-call diagnostic whose `unit_id` is a standard-library package. Go's rule: no dot in the first path element.
+- `no_possible_target` applies only to an `unresolved_interface_call` or `unresolved_dynamic_call` site outside the standard library.
+- A standard-library zero-target site satisfies both criteria and is attributed to `trusted_stdlib`.
+
+`spike/schemacheck` enforces all of this. Changing the pinned Go version invalidates the trust until it is re-reviewed.
 
 The assumption is unsound if a standard-library function queries a database without a modeled edge. In the pinned version, `database/sql` runs queries only through `database/sql/driver` interfaces, whose implementations are third-party or module code and are therefore analyzed without trust.
 
@@ -231,6 +239,10 @@ The assumption is unsound if a standard-library function queries a database with
 | A boundary or concept defined but referenced by no rule | none | Allowed. It is not checked for empty match. |
 
 In every case all diagnostics are listed in the report (plan decision 7).
+
+**Report form of a policy failure.** For `policy_missing`, `policy_invalid` and `policy_no_rules`, the diagnostic has relevance **`global`**, run-level, with empty `affects_rules`. It drives the overall verdict to `2` directly. The report has `rules: []`, `violations: []` and `assumptions: []`, status `INDETERMINATE` and exit code `2`. Examples: `../schema/examples/report.policy-{missing,no-rules,invalid}.json`.
+
+`empty_match` on a referenced boundary or concept is different. It is **rule-specific**, so it has relevance `indeterminate` and names the affected rules in `affects_rules`. Other rules are still evaluated.
 
 ## 9. The demo policy
 

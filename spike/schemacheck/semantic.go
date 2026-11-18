@@ -314,6 +314,30 @@ func checkManifest(d obj) []string {
 	return c.errs
 }
 
+// runLevelKinds must have relevance global: they invalidate the whole run.
+var runLevelKinds = map[string]bool{
+	"policy_missing": true, "policy_invalid": true, "policy_no_rules": true,
+	"analyzer_crash": true, "analyzer_timeout": true, "analyzer_memory_limit": true,
+	"symbol_id_collision": true, "unresolved_external_symbol": true, "entry_mismatch": true,
+}
+
+// policyFailureKinds stop evaluation: the report must carry no rules.
+var policyFailureKinds = map[string]bool{"policy_missing": true, "policy_invalid": true, "policy_no_rules": true}
+
+var unknownCallKinds = map[string]bool{
+	"unresolved_interface_call": true, "unresolved_dynamic_call": true,
+	"bodyless_function": true, "reflection_call": true, "unsafe_pointer": true,
+}
+
+// isStdlib applies Go's rule: standard-library import paths have no dot in
+// their first path element.
+func isStdlib(unit string) bool {
+	first, _, _ := strings.Cut(unit, "/")
+	return unit != "" && !strings.Contains(first, ".")
+}
+
+var relevanceRank = map[string]string{"global": "0", "indeterminate": "1", "warning": "2"}
+
 func checkReport(d obj) []string {
 	c := &checker{}
 	rules := arr(d["rules"])
@@ -333,30 +357,91 @@ func checkReport(d obj) []string {
 	}
 	diags := arr(d["diagnostics"])
 	c.sortedBy("diagnostics", diags, func(o obj) string {
-		r := "1"
-		if o["relevance"] == "indeterminate" {
-			r = "0"
-		}
-		return r + str(o["id"])
+		return relevanceRank[str(o["relevance"])] + str(o["id"])
 	})
 	dByRule := map[string][]string{}
-	indet, warn := 0, 0
+	indet, global, warn := 0, 0, 0
+	policyFailed := false
+	exempted := map[string]int{}
 	for _, x := range diags {
 		x := x.(obj)
-		if want := diagID(x); str(x["id"]) != want {
-			c.errf("diagnostic id %s, recomputed %s", x["id"], want)
+		id, kind, unit := str(x["id"]), str(x["kind"]), str(x["unit_id"])
+		if want := diagID(x); id != want {
+			c.errf("diagnostic id %s, recomputed %s", id, want)
 		}
 		ar := arr(x["affects_rules"])
-		c.sortedBy("affects_rules of "+str(x["id"]), ar, func(o obj) string { return str(o["rule_id"]) })
+		c.sortedBy("affects_rules of "+id, ar, func(o obj) string { return str(o["rule_id"]) })
 		for _, a := range ar {
-			dByRule[str(a.(obj)["rule_id"])] = append(dByRule[str(a.(obj)["rule_id"])], str(x["id"]))
+			dByRule[str(a.(obj)["rule_id"])] = append(dByRule[str(a.(obj)["rule_id"])], id)
 		}
-		if x["relevance"] == "indeterminate" {
+		switch x["relevance"] {
+		case "global":
+			global++
+		case "indeterminate":
 			indet++
-		} else {
+		default:
 			warn++
 		}
+		if runLevelKinds[kind] && x["relevance"] != "global" {
+			c.errf("diagnostic %s: kind %s is run-level and must have relevance global", id, kind)
+		}
+		if policyFailureKinds[kind] {
+			policyFailed = true
+		}
+		// S1: exemption attribution must be verifiable from the diagnostic.
+		switch by := str(x["exempted_by"]); by {
+		case "":
+		case "trusted_stdlib":
+			exempted[by]++
+			if !unknownCallKinds[kind] || !isStdlib(unit) {
+				c.errf("diagnostic %s: trusted_stdlib exemption needs an unknown-call kind owned by a standard-library unit (got %s in %q)", id, kind, unit)
+			}
+		case "no_possible_target":
+			exempted[by]++
+			if (kind != "unresolved_interface_call" && kind != "unresolved_dynamic_call") || isStdlib(unit) || x["site_id"] == nil {
+				c.errf("diagnostic %s: no_possible_target exemption needs a zero-target unresolved call site outside the standard library (got %s in %q)", id, kind, unit)
+			}
+		}
 	}
+
+	// B1: a failed policy means no rule was evaluated.
+	if policyFailed && (len(rules) > 0 || len(viols) > 0) {
+		c.errf("policy failure diagnostic present but the report has %d rules and %d violations; want none", len(rules), len(viols))
+	}
+
+	// S1: both assumptions are listed whenever the DB rule kind is evaluated.
+	asm := arr(d["assumptions"])
+	c.sortedBy("assumptions", asm, func(o obj) string { return str(o["id"]) })
+	evaluatesDB := false
+	for _, r := range rules {
+		if r.(obj)["kind"] == "restrict_concept_to_boundary" {
+			evaluatesDB = true
+		}
+	}
+	gotAsm := map[string]int{}
+	for _, a := range asm {
+		gotAsm[str(a.(obj)["id"])] = num(a.(obj)["exempted_count"])
+	}
+	if evaluatesDB {
+		for _, id := range []string{"no_possible_target", "trusted_stdlib"} {
+			if _, ok := gotAsm[id]; !ok {
+				c.errf("restrict_concept_to_boundary is evaluated but assumption %s is not listed", id)
+			}
+		}
+	} else if len(asm) > 0 {
+		c.errf("assumptions listed but no restrict_concept_to_boundary rule was evaluated")
+	}
+	for id, n := range gotAsm {
+		if exempted[id] != n {
+			c.errf("assumption %s exempted_count %d, but %d diagnostics carry exempted_by %s", id, n, exempted[id], id)
+		}
+	}
+	for id, n := range exempted {
+		if _, ok := gotAsm[id]; !ok {
+			c.errf("%d diagnostics exempted by %s, which is not listed in assumptions", n, id)
+		}
+	}
+
 	ruleIDs := map[string]bool{}
 	anyV := false
 	for _, r := range rules {
@@ -373,7 +458,7 @@ func checkReport(d obj) []string {
 		switch {
 		case len(vs) > 0:
 			want, anyV = "VIOLATION", true
-		case len(ds) > 0:
+		case len(ds) > 0 || global > 0:
 			want = "INDETERMINATE"
 		}
 		if fmt.Sprint(strs(arr(r["diagnostic_ids"]))) != fmt.Sprint(ds) {
@@ -397,7 +482,7 @@ func checkReport(d obj) []string {
 	switch {
 	case anyV:
 		want = "VIOLATION"
-	case indet > 0:
+	case indet > 0 || global > 0:
 		want = "INDETERMINATE"
 	}
 	if d["status"] != want {
@@ -405,7 +490,8 @@ func checkReport(d obj) []string {
 	}
 	s := d["summary"].(obj)
 	if num(s["violations"]) != len(viols) || num(s["indeterminate_diagnostics"]) != indet ||
-		num(s["warning_diagnostics"]) != warn || num(s["rules"]) != len(rules) {
+		num(s["global_diagnostics"]) != global || num(s["warning_diagnostics"]) != warn ||
+		num(s["rules"]) != len(rules) {
 		c.errf("summary counts do not match the report body")
 	}
 	inc := strs(arr(d["packages"].(obj)["included"]))

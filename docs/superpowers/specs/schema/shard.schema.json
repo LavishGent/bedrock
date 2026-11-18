@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.2/shard.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.3/shard.schema.json",
   "title": "Bedrock POC unit shard",
   "description": "Facts for exactly one unit (Go package). The shard owns every record whose owner unit is this unit; anything else it mentions is listed in external_symbols. Ordering, ID and integrity rules: README.md.",
   "type": "object",

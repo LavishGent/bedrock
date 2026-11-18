@@ -1,0 +1,15 @@
+{
+  "b1-invalid-global-relevance-unit-scope.json": "at '/diagnostics/0/scope': value must be 'global'",
+  "b1-invalid-summary-mismatch.json": "at '/summary': 'anyOf' failed",
+  "b1-no-rules-as-warning.json": "kind policy_no_rules is run-level and must have relevance global",
+  "b1-no-rules-global-with-affects.json": "at '/diagnostics/0/affects_rules': maxItems: got 1, want 0",
+  "b1-policy-missing-exit0.json": "at '/summary/global_diagnostics': value must be 0",
+  "b1-policy-missing-exit1.json": "at '/exit_code': value must be 2",
+  "b1-policy-missing-rules-evaluated.json": "policy failure diagnostic present but the report has 1 rules",
+  "s1-assumptions-duplicate.json": "are equal",
+  "s1-assumptions-unsorted.json": "assumptions not strictly sorted",
+  "s1-count-does-not-reconcile.json": "assumption trusted_stdlib exempted_count 4410, but 2 diagnostics",
+  "s1-exempted-but-indeterminate.json": "exempted_by': got string, want null",
+  "s1-missing-no-possible-target.json": "assumption no_possible_target is not listed",
+  "s1-trusted-stdlib-on-chi.json": "trusted_stdlib exemption needs an unknown-call kind owned by a standard-library unit"
+}
