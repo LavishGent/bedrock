@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.1/analysis.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.2/analysis.schema.json",
   "title": "Bedrock POC analysis manifest",
   "description": "One per analyzer run. Names the shard set that forms the run (so the evaluator can check completeness), carries global diagnostics, and records the analysis universe and the Entry digest. Rules: README.md.",
   "type": "object",

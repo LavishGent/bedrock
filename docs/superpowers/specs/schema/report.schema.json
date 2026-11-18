@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.1/report.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.2/report.schema.json",
   "title": "Bedrock POC check report",
   "description": "Output of `bedrock check --format json`. Verdict: any violation gives VIOLATION/1; otherwise any diagnostic with relevance=indeterminate gives INDETERMINATE/2; otherwise PASS/0. Every diagnostic is listed in every case. Rules: README.md.",
   "type": "object",
@@ -14,6 +14,7 @@
     "build_profile",
     "policy",
     "inputs",
+    "assumptions",
     "summary",
     "packages",
     "rules",
@@ -106,6 +107,35 @@
         "shard_count": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "assumptions": {
+      "description": "Analysis assumptions the verdict depends on, with how many diagnostics each one exempted. Sorted by id. Plan section 7 (owner decision A) requires trusted_stdlib to be listed whenever restrict_concept_to_boundary is evaluated.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "statement",
+          "exempted_count"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "trusted_stdlib",
+              "no_possible_target"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exempted_count": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       }
     },

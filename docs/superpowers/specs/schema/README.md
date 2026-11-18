@@ -1,4 +1,4 @@
-# Bedrock POC fact and report schema, version 0.1
+# Bedrock POC fact and report schema, version 0.2
 
 **Status:** Pinned in POC step 0 (plan `../2026-11-17-bedrock-poc-plan.md`, sections 3 and 8).
 **Scope:** The Go POC only. The parent spec's multi-language IPC (`../2026-11-15-bedrock-design.md`, section 3) stays the long-term target. This schema is the POC's concrete form of it.
@@ -14,7 +14,7 @@ This README is normative. The JSON Schemas check structure. The rules below cove
 | `analysis.schema.json` | One `analysis_manifest` per analyzer run: the shard set, the build profile, the universe, the Entry digest and global diagnostics. |
 | `report.schema.json` | The `bedrock check --format json` report. |
 | `examples/shard.spike-cmd-server.json` | A real shard for `spike/target/cmd/server`. File hashes, content hash, dependency hashes and call-site ordinals come from the spike under the pinned profile. |
-| `examples/shard.illustrative-api.json` | A hand-written shard that exercises closures, generic instances, bound and pointer wrappers, duplicate routes, middleware, excluded files, null locations and an unresolved dynamic call. Hashes are placeholders. |
+| `examples/shard.illustrative-api.json` | A hand-written shard that exercises closures, generic instances, bound and pointer wrappers, duplicate routes, middleware, excluded files, null locations and a reflection call in module code. Hashes are placeholders. |
 | `examples/analysis.illustrative.json` | A manifest with a global diagnostic. The unit list is abbreviated. |
 | `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic and two warnings, showing precedence and affected-rule reporting. |
 
@@ -31,7 +31,12 @@ go run ./spike/schemacheck $S \
 
 ## Versioning
 
-Every document has `"schema_version": "0.1"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.1/`. They are identifiers, not fetchable URLs.
+Every document has `"schema_version": "0.2"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.2/`. They are identifiers, not fetchable URLs.
+
+Changelog:
+
+- **0.2** (step 1): the report gains the required `assumptions` array (`trusted_stdlib`, `no_possible_target`, each with `exempted_count`). Plan section 7 (owner decision A) requires the report to list the trusted-standard-library assumption and the count of calls it exempted. The relevance criteria themselves are defined in `../policy/README.md`.
+- **0.1** (step 0): initial version.
 
 ## Canonical JSON and hashes
 
@@ -189,6 +194,7 @@ Entry = { s in all shards' symbols : s.in_universe
 - **Rule results**: `rules[].diagnostic_ids` lists the indeterminate diagnostics for each rule, including rules that also have violations.
 - **Verdict per rule**: `VIOLATION` if it has violations, else `INDETERMINATE` if it has diagnostics, else `PASS`.
 - **Overall verdict**: `VIOLATION`/1 if any violation exists, else `INDETERMINATE`/2 if any indeterminate diagnostic exists, else `PASS`/0. All diagnostics are always listed. The report example shows this: `VIOLATION` overall, with rule `db-in-repo` indeterminate.
+- **Assumptions**: the report's `assumptions` lists each relevance exemption that was applied (`trusted_stdlib`, `no_possible_target`) with the number of diagnostics it exempted. Exempted diagnostics are still listed, with relevance `warning`.
 - **Included and excluded scope**: the report lists included and excluded packages and files (plan section 7).
 
 ## Plan section 3 coverage

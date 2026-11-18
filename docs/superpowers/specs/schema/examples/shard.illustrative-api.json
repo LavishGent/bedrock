@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "kind": "unit_shard",
   "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
   "unit": {
@@ -338,6 +338,10 @@
       "unit_id": "net/http"
     },
     {
+      "id": "(reflect.Value).Call",
+      "unit_id": "reflect"
+    },
+    {
       "id": "example.com/app/internal/auth.RequireAuth",
       "unit_id": "example.com/app/internal/auth"
     }
@@ -421,16 +425,18 @@
       "id": "(*example.com/app/internal/api.Handler).Run#0",
       "caller": "(*example.com/app/internal/api.Handler).Run",
       "ordinal": 0,
-      "mode": "dynamic",
-      "callee_hint": null,
-      "targets": [],
-      "resolution": "vta",
+      "mode": "static",
+      "callee_hint": "(reflect.Value).Call",
+      "targets": [
+        "(reflect.Value).Call"
+      ],
+      "resolution": "static",
       "loc": {
         "root": "repo",
         "module": null,
         "file": "internal/api/api.go",
         "line": 35,
-        "column": 4
+        "column": 14
       }
     },
     {
@@ -656,21 +662,21 @@
   ],
   "diagnostics": [
     {
-      "kind": "unresolved_dynamic_call",
+      "kind": "reflection_call",
       "severity": "warning",
       "scope": "unit",
       "unit_id": "example.com/app/internal/api",
       "symbol_id": "(*example.com/app/internal/api.Handler).Run",
       "site_id": "(*example.com/app/internal/api.Handler).Run#0",
-      "message": "Call through func value `fn` has no VTA targets.",
+      "message": "reflect.Value.Call in module code: callees are not known to the call graph.",
       "loc": {
         "root": "repo",
         "module": null,
         "file": "internal/api/api.go",
         "line": 35,
-        "column": 4
+        "column": 14
       },
-      "id": "diag:7021aec178f1d1ef"
+      "id": "diag:b8c3e41829a155db"
     },
     {
       "kind": "duplicate_route",

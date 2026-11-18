@@ -128,6 +128,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 0. **Schema and spikes.** Pin the JSON shard and report schema with examples (section 3). Pin Go and `x/tools` versions and the build profile. Create a minimal compilable spike module under `spike/` (a repo package, a handler, a `database/sql` call, one `chi` route). The full demo states stay in step 1. Run a bounded SSA, CHA and VTA spike on it with explicit timeout and memory expectations, and record the results and the standard-library diagnostics.
    *Delivered:* schema 0.1 and examples in `schema/` (validated by `spike/schemacheck`), pins in section 7, spike module `spike/target`, bounded spike `spike/ssaspike`, results and open issues in `step0/2026-11-17-ssa-spike.md`.
 1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in all states).
+   *Delivered:* `.bedrock/policy.toml`, policy contract `policy/README.md` (S1), router matrix `routers/README.md` (B4), `demo/clean`, `demo/violating`, `testdata/broken`, `.github/CODEOWNERS`, and schema 0.2 (report `assumptions`). Evidence in `step1/2026-11-17-step1-evidence.md`.
 2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
 3. Route and middleware extraction per the support matrix. `require_middleware`.
 4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
@@ -172,5 +173,5 @@ Automated acceptance matrix:
 ## 12. Open questions
 
 - VTA run time and memory on the demo with the full analysis universe. Step 0 measured the spike: about 1 s and about 0.75 GiB for 16,966 functions, 99% of them standard library (`step0/2026-11-17-ssa-spike.md`). The demo is re-measured in step 4.
-- How a reachable unknown call is "proven irrelevant" (section 7). On the clean spike, the route handler reaches 1,844 standard-library unknown-call sites, so without a stated criterion the clean demo is `INDETERMINATE` for `restrict_concept_to_boundary`. Needs an owner decision before step 4 (step 0 note, open issue 1).
+- ~~How a reachable unknown call is "proven irrelevant"~~ Decided 2026-11-17 (owner decision A, section 7): trusted pinned standard library plus no-possible-target. The contract is in `policy/README.md`.
 - Real-world accuracy is untested until a real Go service is added as a target.

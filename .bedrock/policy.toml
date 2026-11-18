@@ -1,0 +1,65 @@
+# Bedrock POC policy for the demo service (demo/clean and demo/violating).
+# Contract: docs/superpowers/specs/policy/README.md (version 1).
+# Protected by CODEOWNERS; CI reads this file from the base branch only.
+
+version = 1
+module = "example.com/demo"
+
+# ---------------------------------------------------------------- boundaries
+# Sets of packages, matched by import path. "**" matches zero or more whole
+# segments, so "example.com/demo/**" includes example.com/demo itself.
+
+[boundary.app]
+packages = ["example.com/demo/**"]
+
+[boundary.repo]
+packages = ["example.com/demo/internal/repo/**"]
+
+[boundary.auth]
+packages = ["example.com/demo/internal/auth"]
+
+[boundary.auth_private]
+packages = ["example.com/demo/internal/auth/private/**"]
+
+[boundary.routes]
+packages = ["example.com/demo/internal/server"]
+
+# ------------------------------------------------------------------ concepts
+
+[concept."database.query"]
+packs = ["go-stdlib-sql"]
+
+[concept."auth.middleware"]
+symbols = ["example.com/demo/internal/auth.RequireAuth"]
+
+# --------------------------------------------------------------------- rules
+
+[[rule]]
+id = "auth-private-import"
+kind = "forbid_import"
+scope = "app"
+target = "auth_private"
+except_from = ["auth"]
+message = "Only example.com/demo/internal/auth may import auth/private."
+remediation.message = "Use the public auth API (auth.IsAdmin, auth.UserFromContext) instead of auth/private."
+remediation.suggest = ["example.com/demo/internal/auth"]
+
+[[rule]]
+id = "routes-require-auth"
+kind = "require_middleware"
+scope = "routes"
+middleware = "auth.middleware"
+except_routes = ["GET /healthz"]
+message = "Every non-public route must be wrapped by auth.RequireAuth."
+remediation.message = "Register the route inside the authenticated group (r.Use(auth.RequireAuth)) or wrap it: mux.Handle(p, auth.RequireAuth(h))."
+remediation.suggest = ["example.com/demo/internal/auth.RequireAuth"]
+
+[[rule]]
+id = "db-in-repo"
+kind = "restrict_concept_to_boundary"
+scope = "app"
+concept = "database.query"
+boundary = "repo"
+message = "Database queries must run inside the approved repository boundary."
+remediation.message = "Move the query into example.com/demo/internal/repo and call it through the handler's Store."
+remediation.suggest = ["example.com/demo/internal/repo/**"]

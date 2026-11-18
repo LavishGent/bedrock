@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "kind": "analysis_manifest",
   "analyzer": {
     "name": "bedrock-analyzer-go",
@@ -37,7 +37,7 @@
       "id": "example.com/app/internal/api",
       "origin": "module",
       "content_hash": "sha256:037529fbd210132675347062d059c749ef9cd6f667866453f7f808bdf166db94",
-      "shard": "sha256:62e0dbacb032f583c9d81669610663d45f6ec9a88e74c174bef8d7912d12f66f"
+      "shard": "sha256:661be1ac0f0ef8d18187916f2ddc66fe6135486d0f2f70ce41aefd8606890db3"
     },
     {
       "id": "example.com/app/internal/auth",
