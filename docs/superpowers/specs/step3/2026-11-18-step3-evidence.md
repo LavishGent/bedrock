@@ -143,3 +143,71 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
 schemacheck: exit 0 over 388 documents, 0 failures
 ```
+
+## Router value audit (Codex re-review of 45133a0/b10332d: design fix)
+
+This was the third finding in one class: router values escaping an audit that only tracked constructor-owned values. The per-repro patches are replaced by a whole-module audit, `internal/analyze/audit.go`. The normative rule is the "Router value audit" section of `../routers/README.md`:
+
+- **Seeding.** Every router-bearing SSA source is tracked: parameters, free variables, global loads, allocations, field loads, call results, factories and helper parameters (an interprocedural fixed point), and every conversion, phi, type assertion or extract derived from them.
+- **Allowlist.** Each use must be one of: a recognized router operation on it; a return; an enumerated serving API (now including `httptest.NewServer`, `NewUnstartedServer` and `NewTLSServer`); `ServeHTTP` with a proven concrete type; a read-only use; or an argument to an audited module function that tracks it.
+- **Everything else** is module-wide `unsupported_router_form`. No further callback signatures were added.
+
+**Regressions** (`cmd/bedrock/audit_test.go`): isolated modules sharing a dependency `example.com/dep` that registers an unauthenticated `/private`. Each Codex source and each adversarial variant first proves, with a real `httptest` request, that `/private` answers 200 without credentials, then asserts exit 2 with `unsupported_router_form`.
+
+- `TestRouterAuditCodexSources` covers the ten Codex sources:
+  - a `*http.ServeMux` parameter, `new(http.ServeMux)`, or `http.DefaultServeMux`, each converted to the dependency's adapter type;
+  - `Wire(r){dep.SetupAny(r)}`;
+  - `dep.SetupBox(&dep.Box{R:r})`;
+  - `dep.SetupUnsafe(unsafe.Pointer(r))`;
+  - `reflect.ValueOf(r).MethodByName("Get").Call(...)`;
+  - `dep.Run(func(){dep.SetupAny(r)})`;
+  - a `makeRouter()` factory, and a factory returning `http.Handler`.
+- `TestRouterAuditAdversarial` covers my own 13 variants: a generic pass-through, a method value passed out, struct embedding, interface embedding, a channel, a map, `defer`, a `go` statement, a slice, a global, a returned closure, an `any` helper in module code, and a tuple-returning factory.
+- `TestRouterAuditNoFalsePositives` stays exit 0 under the auth-only policy. It covers:
+  - a chi router served by `http.ListenAndServe`;
+  - a ServeMux in an `http.Server`;
+  - a serve helper with direct and interface `ServeHTTP` on a proven router;
+  - `httptest.NewServer`, a trusted serving sink added with this regression.
+
+Against the previous code (`routes.go` at `b10332d`, without the audit), all ten Codex sources and 9 of the 13 adversarial variants were silent bypasses (exit 0, PASS). The other four were already non-PASS:
+
+```
+TestRouterAuditCodexSources/servemux-parameter-adapter -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/new-servemux-adapter -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/default-servemux-adapter -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/wire-setup-any -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/setup-box -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/setup-unsafe -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/reflect-method-call -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/run-closure -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/factory-router -> old code: exit 0 PASS (bypass)
+TestRouterAuditCodexSources/factory-interface -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/generic-pass-through -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/method-value-out -> old code: already non-PASS
+TestRouterAuditAdversarial/struct-embedding -> old code: already non-PASS
+TestRouterAuditAdversarial/interface-embedding -> old code: already non-PASS
+TestRouterAuditAdversarial/channel -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/map -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/defer -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/go-statement -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/slice -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/global -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/returned-closure -> old code: already non-PASS
+TestRouterAuditAdversarial/module-any-helper -> old code: exit 0 PASS (bypass)
+TestRouterAuditAdversarial/tuple-factory -> old code: exit 0 PASS (bypass)
+```
+
+**Results after the fix.** `demo/clean` (exit 2; `forbid_import` and `require_middleware` PASS; only `rule_not_evaluated`) and `demo/violating` (exit 1; exactly `billing.go:9` and `server.go:18`) are unchanged. `testdata/routerinit` gains a conservative `unsupported_router_form`, because its initializer stores a router into the package-level `Admin` variable; it still exits 1 on its real violation.
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant [('unsupported_router_form', 'example.com/routerinit')]
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
+schemacheck: exit 0 over 388 documents, 0 failures
+```

@@ -143,6 +143,42 @@ middleware = "auth.middleware"
 | `internal/api`: `mux.Handle("GET /x/{b}", h.B)` after `mux.Handle("GET /x/{a}", h.A)` | `unsupported_router_form` (same-mux conflict, no fact) | **indeterminate** | not affected |
 | `internal/util`: `func reg(r chi.Router) { r.Get("/z", h.Z) }` | `unsupported_router_form` (receiver is a parameter) | **indeterminate** | **indeterminate** |
 
+### Router value audit (normative)
+
+This rule replaces the earlier "router escape" rule, which audited only values the analyzer created itself. `internal/analyze/audit.go` implements it.
+
+**Tracked values.** Every SSA value of every module function that may carry a router is tracked.
+
+| Category | Values |
+| --- | --- |
+| **Seeds** | Any value whose type is a router (`*http.ServeMux`, `http.ServeMux`, `*chi.Mux`, `chi.Router`, or an alias of one), or a defined type convertible to one (the same underlying type as `http.ServeMux` or `chi.Mux`, such as `type Mux http.ServeMux`). This covers parameters, closure free variables, loads (`http.DefaultServeMux`), allocations (`new(http.ServeMux)`, zero values), field loads, call results, type assertions, extracts and phis. |
+| **Factories and helpers** | Computed interprocedurally to a fixed point: the results of calls to module functions that return a tracked value at that result index, and the parameters of module functions that receive a tracked value. |
+| **Derived values** | `MakeInterface`, `ChangeInterface`, `ChangeType`, `Convert`, `TypeAssert` and `Phi` results of tracked values. |
+
+**Allowlist.** A tracked value may be used only as follows:
+
+1. as the **receiver** of a recognized router operation (section 1), never as one of its arguments;
+2. **returned** to the caller;
+3. as the handler argument of an **enumerated serving API** (`http.ListenAndServe`, `ListenAndServeTLS`, `Serve`, `ServeTLS`, `httptest.NewServer`, `NewUnstartedServer`, `NewTLSServer`), or stored into the `Handler` field of an `http.Server`;
+4. in a call to **`ServeHTTP`**, or to `(*http.ServeMux).Handler`, **only when the concrete type is proven** to be the recognized router. Proof starts only from a value whose static type is `*http.ServeMux` or `*chi.Mux`, and survives only `MakeInterface` and `ChangeInterface`. A parameter or value of interface type has no proof, and a phi drops it;
+5. in a **read-only** use: a debug reference or an `==`/`!=` comparison;
+6. as an argument to an **analyzed module function** whose corresponding parameter is tracked, so that the callee is audited for it; or in an interface-preserving conversion or phi, whose result is tracked and audited in turn. A `ChangeType` is allowed only if it targets a recognized router type.
+
+**Every other use is module-wide `unsupported_router_form`.** That includes:
+
+- passing the value to a dependency, a generic instance, a function value, an interface method, `reflect` or `unsafe`;
+- storing it into a variable, field, slice, map, channel or global;
+- capture by a closure, including through a method value;
+- conversion to another defined type.
+
+The rule fails closed: no further callback signatures are recognized. Code is not flagged when it builds a router locally, registers routes, returns it and serves it through the enumerated APIs; `cmd/bedrock` `TestRouterAuditNoFalsePositives` covers this.
+
+Known conservative cases, which are not violations of the rule:
+
+- A router wrapped by a stdlib handler such as `http.StripPrefix(p, r)` or `http.TimeoutHandler(r, ...)` is flagged.
+- A router stored into a package-level variable is flagged (fixture `testdata/routerinit`).
+- A router passed to a helper whose parameter is an interface stays tracked if the helper is module code. It is flagged only where the helper does something off the allowlist.
+
 ## 3. Handlers and the direct wrapper form
 
 A **direct handler** is one of the following:
