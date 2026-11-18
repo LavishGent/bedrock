@@ -142,7 +142,7 @@ symbols = ["backend/internal/auth.RequireAuth"]
 
 ### Built-In Framework Adapter Behavior
 
-- **`go-stdlib-sql`:** Binds `database/sql.(*DB).Query*`, `Exec*`, `Prepare*`, and `(*Tx).*` to `database.query`.
+- **`go-stdlib-sql`:** Binds the query, exec and prepare methods of `database/sql` `(*DB)`, `(*Tx)`, `(*Stmt)` and `(*Conn)` (`Query*`, `Exec*`, `Prepare*`, and `(*Stmt)` execution methods) to `database.query`. `Commit`, `Rollback` and other control methods are not bound. Other drivers and ORMs are unsupported unless bound explicitly.
 - **`go-chi` / `go-net-http`:** Extracts `r.Get/Post/Put/Delete/Route/Group` and `r.Use(...)` middleware chains, emitting `route` and `route_middleware` facts. Route groups mounted under `/internal` or annotated via binding `route_paths` receive `visibility = "internal"`.
 - **`ts-fetch` / `ts-axios`:** Extracts `fetch(...)` and `axios.*` calls. Constant template literals and known string constants resolve to `resolution = "literal"` with normalized paths; non-constant expressions emit `resolution = "dynamic"` plus a diagnostic.
 
@@ -235,6 +235,7 @@ invariant "frontend cannot call internal backend endpoints" {
   2. Map changed files to owning `unit` IDs, then compute transitive reverse-dependent units from the cached `import` graph.
   3. Re-run `bedrock-analyzer-go` / `bedrock-analyzer-ts` **only** on dirty units + reverse dependents; read unmodified units from cached `UnitShard` JSON files.
   4. Merge all shards into the full repository Semantic Fact Graph and run the fixed-point Datalog evaluator—guaranteeing exactness for global `reachable_from` and cross-service rules.
+- **Known limitation (to resolve before the cache is built):** Go call facts come from whole-program VTA analysis. A change in one package can alter outgoing indirect-call edges of an unchanged dependency (for example a callback passed into a helper), so reverse-dependents alone do not guarantee exactness. Cache syntax- and type-local facts per unit, and recompute global call inference on every run, or track the real global dependencies.
 - If cache metadata is missing, corrupt, or `bindings.toml`/pack versions changed, fall back cleanly to full analysis.
 
 ### Exit Codes & JSON Report Format
@@ -301,12 +302,12 @@ The `demo/` workspace proves end-to-end multi-language governance across a reali
 
 - **Backend (`demo/backend/`):** Go HTTP service (`chi` + `database/sql` / SQLite or stub driver) with:
   - `internal/repo/` (approved repository boundary)
-  - `internal/auth/` (approved `RequireAuth` middleware + `internal/auth/internal/` private subpackage)
+  - `internal/auth/` (approved `RequireAuth` middleware + `internal/auth/private/` subpackage that policy, not Go's `internal` rule, forbids other packages from importing; Go rejects cross-subtree imports of `internal/` directories, which would break package loading)
   - `internal/billing/`, `internal/handler/`, and route setup (`public`, `/api/v1/**`, `/internal/**`)
 - **Frontend (`demo/frontend/`):** TypeScript module calling backend endpoints via `fetch`.
 - **Four Deliberate Demo Violations (verified on a `demo-violating` fixture/state):**
   1. Handler executes `db.QueryContext(...)` directly instead of calling `internal/repo`.
-  2. `internal/billing` imports `internal/auth/internal` across a prohibited module boundary.
+  2. `internal/billing` imports `internal/auth/private`, which policy forbids outside `internal/auth/**`.
   3. `/api/v1/admin/users` route registered without `auth.RequireAuth` middleware.
   4. `demo/frontend/src/client.ts` invokes `fetch("/internal/export")` directly.
 - **Verification Loop:** Running `bedrock check --format json` detects all 4 violations with exact witness chains and remediation hints; applying the four corresponding fixes (moving query to `internal/repo`, using public `auth` API, wrapping route with `RequireAuth`, switching frontend to `/api/v1/export`) transitions `bedrock check` to `PASS` (`exit 0`).

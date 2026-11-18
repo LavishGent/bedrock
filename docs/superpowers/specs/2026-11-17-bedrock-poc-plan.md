@@ -1,7 +1,7 @@
 # Bedrock POC Plan (Go)
 
 **Date:** 2026-11-17
-**Status:** Draft for Review
+**Status:** Revised after Codex design review (approve-with-changes)
 **Parent spec:** `2026-11-15-bedrock-design.md`
 
 ## 1. Goal
@@ -14,77 +14,136 @@ Bedrock reports. It does not run agents, retry, or score them. Agent integration
 
 In scope:
 
-- Go only.
-- Three rules, built in this order: internal-import boundary, route auth middleware, DB access via approved repository.
-- Routers: `chi` and `net/http`.
+- Go only, one module, one pinned build profile (see section 7).
+- Three rules, referred to by kind, not number: `forbid_import`, `require_middleware`, `restrict_concept_to_boundary`. Build order: `forbid_import`, then `require_middleware`, then `restrict_concept_to_boundary`.
+- Routers: a bounded subset of `chi` and `net/http` (see section 6).
 - A mini Go service in `demo/` with one deliberate violation per rule.
+- Trust-boundary protections from the parent spec (see section 9).
 
 Out of scope:
 
 - TypeScript/JS analyzer and the frontend rule.
 - Rust engine, DSL, Datalog IR, incremental cache.
 - Agent harness, retry loops, benchmarking.
-- Testing against a real open-source Go service (deferred).
+- Testing against a real open-source Go service (deferred). Conclusions apply only to the declared fixtures and build profile.
 - Baselines and waivers.
 
 ## 3. Architecture
 
-A single Go program contains the analyzer and the rule checks. The analyzer writes facts in the parent spec's JSON shard format (`unit`, `symbol`, `import`, `call`, `route`, `route_middleware`, `diagnostic`), so it can be reused when a Rust engine is added. Rule evaluation is written directly in Go and is the throwaway part.
+A single Go program contains the analyzer and the rule checks, with a hard boundary between them: the analyzer writes facts as versioned JSON shards, and the evaluator reads only those shards. Rule evaluation is written directly in Go and is the throwaway part.
+
+Before the analyzer is built, pin a minimal versioned JSON schema and an example shard and report (see section 8, step 0). The schema must define:
+
+- Deterministic IDs and ordering, including anonymous functions, generic instances, method wrappers and duplicate route registrations.
+- Nullable locations, and external (dependency) symbols.
+- Shard ownership and referential integrity.
+- The unit's source file list and content hash, plus dependency hashes.
+- Function-entry metadata, so the policy `Entry` set can be recovered from facts alone.
 
 ## 4. Decisions
 
 | # | Decision |
 | --- | --- |
-| 1 | Success is shown by a demo: run a real agent against the mini service by hand and see whether the report is enough to fix the violations. No benchmark. |
-| 2 | Single Go program; facts still emitted as spec-format JSON shards. |
-| 3 | Rules 2, 3, 1 in that order; `chi` and `net/http`. |
-| 4 | Call graph: VTA (seeded from CHA). Entry points are all exported functions, plus `main`, `init`, and registered route handlers. |
+| 1 | Success is shown by a demo: run a real agent against the mini service by hand and see whether the report is enough to fix the violations. No benchmark. An automated analyzer test matrix (section 10) is separate and required. |
+| 2 | Single Go program; analyzer and evaluator separated by the JSON shard format. |
+| 3 | Rule kinds are built in the order `forbid_import`, `require_middleware`, `restrict_concept_to_boundary`. |
+| 4 | Call graph: CHA seeds VTA. Go and `golang.org/x/tools` versions are pinned. **Analysis universe and policy `Entry` set are separate.** Universe: all exported functions, `main`, `init`, registered handlers, plus closures, methods and wrappers needed for a sound graph, with instantiated generics. **`Entry` (policy): symbols with no incoming call edges, plus registered route handlers, as in the parent spec.** Exported functions are analyzed but are not entries on their own. `Entry` does not change based on violation rates. |
 | 5 | Unit = Go package by import path, test files excluded. Symbol IDs use Go's fully qualified format, e.g. `example.com/app/internal/repo.(*Store).Save`. Locations are repo-relative. Each unit records its source file list and a content hash. |
-| 6 | Config is one `.bedrock/policy.toml` using `[boundary.*]` and `[concept.*]` tables plus three fixed rule kinds: `forbid_import`, `require_middleware`, `restrict_concept_to_boundary`. Boundaries match import paths with `**` globs. A built-in default binds `database/sql` methods to `database.query`. |
-| 7 | Exit codes: `0` PASS, `1` VIOLATION, `2` INDETERMINATE. If both violations and diagnostics exist, `1` wins; the report always lists all diagnostics. |
+| 6 | Config is one `.bedrock/policy.toml` using `[boundary.*]` and `[concept.*]` tables plus the three rule kinds. Boundaries match import paths with `**` globs. See section 5 for the schema requirements. |
+| 7 | Verdict table (intentional clarification of the parent spec): any violation gives `1`; otherwise any relevant indeterminacy gives `2`; otherwise `0`. The report always lists every diagnostic. |
 | 8 | Agent integration: `bedrock check` with JSON and compact text output, plus example Cursor / Claude Code hook config and CI usage in docs. |
 
-## 5. INDETERMINATE triggers
+### `reachable_from` (decision 4 detail)
+
+For callsite caller `c` and approved boundary `B`: the guard holds iff `c` is in `B`, or removing every symbol in `B` from the graph leaves no path from any `Entry` symbol to `c`. A caller unreachable from every `Entry` fails the guard. Over-approximation from CHA or multiple known VTA targets can only make the guard fail. Fixtures must cover shared helpers, cycles, exported helpers that are not entries, closures and interface dispatch.
+
+## 5. Policy contract
+
+The plan must ship one complete `.bedrock/policy.toml` covering all three rules, with field types, defaults and validation. Required behavior:
+
+- Each rule has an ID, scope, boundary or concept references, message and remediation.
+- `require_middleware` defines route exceptions and their matching semantics. Route scope is projected from package scope explicitly.
+- Exact glob semantics, including `**` at a package root.
+- Unknown keys are rejected. A missing policy file, or a policy with zero rules, fails closed (`2`).
+- Empty-match validation applies to every boundary and concept referenced by a rule.
+- SQL binding: the `go-stdlib-sql` pack binds query, exec and prepare methods of `database/sql` `DB`, `Tx`, `Stmt` and `Conn`. Commit, rollback and similar control methods are not bound. Other drivers and ORMs are unsupported unless bound explicitly. Fixtures must test a `Stmt` or `Conn` escaping the repository.
+
+## 6. Router support matrix
+
+Publish a small versioned matrix before implementing `require_middleware`. First version:
+
+- Literal routes with direct handler references.
+- `chi`: `Get`, `Post`, `Put`, `Delete`, `Method`, `Use`, and statically nested `Group`, `Route` and `With`. Effective middleware is computed per individual route.
+- `net/http`: `HandleFunc` and `Handle` on `http.DefaultServeMux` or a locally constructed `ServeMux`, with pattern normalization defined for method, host and path forms.
+- Deferred: `Mount`, aliased router values, helper-function registration, conditional middleware, loops, and general interprocedural router interpretation.
+
+A recognized but unsupported registration, handler wrapper or middleware form yields a diagnostic that affects `require_middleware`. It never disappears and never counts as authenticated. A router registered in a helper package outside the rule's package scope also yields this diagnostic.
+
+## 7. INDETERMINATE triggers
 
 Always `2`:
 
-- A package in a rule's scope fails to load or type-check.
-- Invalid `policy.toml`, or a boundary/concept that matches nothing.
-- Analyzer crash or timeout.
+- A package in a governed rule's scope fails to load or type-check.
+- Invalid or missing `policy.toml`, a referenced boundary or concept that matches nothing, or zero rules.
+- Unsupported module or workspace layout: the POC accepts one explicit module and one pinned build profile (GOOS, GOARCH, build tags, cgo setting). The report lists included and excluded packages and files.
+- Analyzer crash, timeout or memory limit.
 
-`2` only when it touches a rule:
+Relevance for `restrict_concept_to_boundary` is conservative and independent of resolved sink reachability:
 
-- Rule 1: unresolved dynamic call on a path that could reach `database.query`, including interface calls VTA cannot narrow.
-- Rule 3: route registration whose path or handler cannot be resolved statically, in a package in scope.
-- Rule 2: none expected once packages load.
+- Any unknown call (unresolved function value, reflection, `unsafe`, bodyless function, unresolved interface call) that is reachable from a governed `Entry` or sits in a governed unit gives `2`, unless proven irrelevant.
+- Uncertainty carries through helper packages and dependency boundaries. A governed handler calling an out-of-scope helper that has an unknown call gives `2`.
+- Multiple known VTA targets are over-approximation, not missing coverage, and do not give `2` on their own.
+- The plan lists the unsupported cases explicitly (reflection, `unsafe`, bodyless functions, dynamic calls) and each has a fixture.
 
-Warning only: dynamic constructs in packages outside every rule's scope.
+`require_middleware`: unresolved route path or handler, unresolved or conditional middleware chain, and unsupported registration forms (section 6).
 
-## 6. Report contents
+`forbid_import`: none expected once packages load.
 
-Each violation includes: rule ID, location, message, evidence chain, and remediation hint. Each diagnostic includes: kind, location, reason, and which rule it affects. Diagnostics are grouped by kind so the `INDETERMINATE` rate is easy to read.
-
-## 7. Mini service (`demo/`)
-
-- A few `chi` routes and one plain `net/http` route.
-- One repo package (approved boundary), one auth middleware, an internal auth subpackage, a billing package.
-- A small test suite, so a "fix" that breaks behavior is caught by a human running the tests.
-- Two states: `violating` (one violation per rule) and `clean` (passes).
+Warning only: unknown constructs outside every governed scope and unreachable from governed entries.
 
 ## 8. Build order
 
-1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in both states).
-2. Analyzer: package loading, unit and symbol facts, import facts. Rule 2 and the report.
-3. Route extraction for `chi` and `net/http`, and middleware facts. Rule 3.
-4. SSA, CHA, VTA call facts. Rule 1 with `reachable_from`.
-5. Hook examples and the by-hand agent demo.
+0. **Schema and spikes.** Pin the JSON shard and report schema with examples (section 3). Pin Go and `x/tools` versions. Run a bounded SSA, CHA and VTA spike on the demo with explicit timeout and memory expectations, and record the results.
+1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in all states).
+2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
+3. Route and middleware extraction per the support matrix. `require_middleware`.
+4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
+5. Hook and CI examples, plus the by-hand agent demo.
 
-## 9. Coordination
+## 9. Trust boundary
+
+The POC keeps the parent spec's protections (invariant 2 and the CI section):
+
+- CODEOWNERS covers `.bedrock/**`, `packs/**`, the CI workflow and the approved middleware implementation.
+- CI loads policy and bindings from the base branch, never from the PR.
+- The `bedrock` binary comes from a pinned, checksummed release, never from the PR. Go toolchain and dependency versions are pinned, and the package driver and build environment are controlled.
+- Bedrock checks only that approved middleware is structurally attached. Replacing `RequireAuth` with a no-op wrapper keeps the facts unchanged, so an auth behavior test in the demo must fail on a no-op wrapper, and the middleware implementation is protected by CODEOWNERS.
+
+## 10. Demo service and test matrix
+
+Mini service (`demo/`):
+
+- A few `chi` routes and one plain `net/http` route.
+- One repo package (approved boundary), one auth middleware, an `internal/auth/private` subpackage that policy forbids other packages from importing, and a billing package. All fixtures compile; Go's own `internal` rule is never violated.
+- Behavior tests, including an auth test that rejects a no-op middleware.
+- States: `violating` (one violation per rule), `clean` (passes), and a separate `broken` fixture with an illegal Go import to exercise `INDETERMINATE` from a load failure.
+
+Automated acceptance matrix:
+
+- Each rule kind passes and fails independently.
+- Compile error gives `2`.
+- Unsupported dynamic call, route and middleware each give `2`.
+- Shared-helper bypass, exported helper that is not an entry, `Stmt` escaping the repository.
+- Empty binding gives `2`.
+- Violation plus indeterminate diagnostic gives `1`, with diagnostics listed.
+- JSON output is stable and deterministic across runs.
+
+## 11. Coordination
 
 - `[w] ticket gate waived by operator (2026-11-17): no tickets for this POC.` Work is tracked by the build order in section 8 and this file. No `coordinator.json` exists, so defaults apply.
+- Design review: Codex, 2026-11-17, approve-with-changes. Blockers B1 to B4 and should-fix S1 to S6 are addressed in this revision. S7 (cache exactness) is recorded in the parent spec as a limitation to resolve before the cache is built. Operator decisions: keep the parent spec's `Entry` definition, and keep the trust-boundary protections.
 
-## 10. Open questions
+## 12. Open questions
 
-- VTA run time with all exported functions as roots. Record it on the demo service and revisit if it is too slow.
-- Share of violations that come only from non-handler exported roots. If high, switch to handlers plus `main` as roots.
-- Untested on real-world code until a B target is added.
+- VTA run time and memory on the demo with the full analysis universe (step 0 measures it).
+- Real-world accuracy is untested until a real Go service is added as a target.
