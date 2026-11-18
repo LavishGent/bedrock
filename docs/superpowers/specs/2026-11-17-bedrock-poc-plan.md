@@ -109,7 +109,10 @@ The profile is recorded in every manifest and report as `build_profile` and boun
 
 Relevance for `restrict_concept_to_boundary` is conservative and independent of resolved sink reachability:
 
-- Any unknown call (unresolved function value, reflection, `unsafe`, bodyless function, unresolved interface call) that is reachable from a governed `Entry` or sits in a governed unit gives `2`, unless proven irrelevant.
+- Any unknown call (unresolved function value, reflection, `unsafe`, bodyless function, unresolved interface call) that is reachable from a governed `Entry` or sits in a governed unit gives `2`, unless it is irrelevant under one of the two criteria below (owner decision A, 2026-11-17).
+  - **Trusted standard library.** Unknown calls whose body is in the pinned Go standard library (go1.26.11) are not counted. This is an explicit assumption: standard-library code reaches user code only through calls the analysis already models, and it never executes a database query on its own. Third-party dependencies (for example `chi`) and module code get no such trust. The report must list the assumption and the count of exempted calls.
+  - **No possible target.** A call that the whole-program analysis shows has no possible target in the analyzed universe is not an unknown call.
+  - Neither criterion applies to calls reached through user-supplied callbacks, reflection or `unsafe` in module or third-party code.
 - Uncertainty carries through helper packages and dependency boundaries. A governed handler calling an out-of-scope helper that has an unknown call gives `2`.
 - Multiple known VTA targets are over-approximation, not missing coverage, and do not give `2` on their own.
 - The plan lists the unsupported cases explicitly (reflection, `unsafe`, bodyless functions, dynamic calls) and each has a fixture.
