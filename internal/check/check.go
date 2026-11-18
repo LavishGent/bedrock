@@ -72,10 +72,18 @@ func PolicyOnly(label string, sum *string, d facts.Diagnostic, rules []policy.Ru
 	return r
 }
 
+// LoadPolicy reads and validates the policy for a check (bounded, regular
+// files only).
+func LoadPolicy(o Options) policy.Result {
+	modPath, _ := analyze.ModulePath(o.Dir) // a missing go.mod is reported as layout later
+	return policy.Load(o.PolicyPath, modPath)
+}
+
 // Run performs one check.
-func Run(ctx context.Context, o Options) *Output {
-	modPath, _ := analyze.ModulePath(o.Dir) // a missing go.mod is reported as layout below
-	pr := policy.Load(o.PolicyPath, modPath)
+func Run(ctx context.Context, o Options) *Output { return RunWithPolicy(ctx, o, LoadPolicy(o)) }
+
+// RunWithPolicy performs one check with an already loaded policy.
+func RunWithPolicy(ctx context.Context, o Options, pr policy.Result) *Output {
 	if pr.Diag != nil {
 		return &Output{Report: PolicyOnly(o.PolicyLabel, pr.SHA256, *pr.Diag, nil)}
 	}

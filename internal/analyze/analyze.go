@@ -31,6 +31,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/LavishGent/bedrock/internal/facts"
+	"github.com/LavishGent/bedrock/internal/fsutil"
 )
 
 // Pinned toolchain and build profile (plan section 7).
@@ -124,7 +125,7 @@ type Result struct {
 
 // ModulePath reads the module path from dir/go.mod.
 func ModulePath(dir string) (string, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	raw, err := fsutil.ReadRegular(filepath.Join(dir, "go.mod"), 1<<20)
 	if err != nil {
 		return "", err
 	}

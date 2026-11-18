@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"go/token"
 	"io/fs"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/LavishGent/bedrock/internal/facts"
+	"github.com/LavishGent/bedrock/internal/fsutil"
 	"github.com/LavishGent/bedrock/internal/glob"
 )
 
@@ -58,6 +58,9 @@ type Rule struct {
 	Concept, Boundary string
 }
 
+// MaxPolicyBytes bounds the policy file size.
+const MaxPolicyBytes = 1 << 20
+
 // Result of loading a policy: either a Policy or a failure diagnostic.
 type Result struct {
 	Policy *Policy
@@ -68,7 +71,7 @@ type Result struct {
 // Load reads and validates the policy at path. modulePath is the analyzed
 // module's path; the policy's module key must equal it.
 func Load(path, modulePath string) Result {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadRegular(path, MaxPolicyBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		d := facts.NewDiagnostic("policy_missing", "error", nil, nil,
 			fmt.Sprintf("%s not found; no rule can be evaluated.", path), nil)

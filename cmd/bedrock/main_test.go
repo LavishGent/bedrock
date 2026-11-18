@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 const repoPolicy = "../../.bedrock/policy.toml"
@@ -422,4 +424,53 @@ func TestHostileEnvironment(t *testing.T) {
 	if decode(t, a).ExitCode != 1 {
 		t.Fatalf("hostile environment changed the verdict:\n%s", a)
 	}
+}
+
+// S3 repro: a policy FIFO with no writer and --timeout 100ms. Before the fix
+// the parent re-read the policy after the abort and hung forever. Now a
+// report is written and the run exits 2 promptly, whether the child rejects
+// the FIFO first (policy_invalid) or the 100ms limit fires first.
+func TestPolicyFIFO(t *testing.T) {
+	fifo := filepath.Join(t.TempDir(), "policy.toml")
+	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+		t.Skip("mkfifo unsupported:", err)
+	}
+	for _, timeout := range []string{"100ms", "30s"} {
+		start := time.Now()
+		code, raw, _ := run(t, "--timeout", timeout, "--policy", fifo, "../../demo/clean")
+		if elapsed := time.Since(start); elapsed > 10*time.Second {
+			t.Fatalf("timeout %s: took %s", timeout, elapsed)
+		}
+		r := decode(t, raw)
+		if code != 2 || r.Status != "INDETERMINATE" || len(r.Diagnostics) != 1 || r.Diagnostics[0].Relevance != "global" {
+			t.Fatalf("timeout %s: exit %d status %s diags %+v; want 2 with one global diagnostic", timeout, code, r.Status, r.Diagnostics)
+		}
+		k := r.Diagnostics[0].Kind
+		if k != "policy_invalid" && k != "analyzer_timeout" {
+			t.Fatalf("timeout %s: diagnostic %s, want policy_invalid (FIFO rejected) or analyzer_timeout", timeout, k)
+		}
+		if timeout == "30s" && k != "policy_invalid" {
+			t.Fatalf("with a generous limit the FIFO must be rejected as policy_invalid, got %s", k)
+		}
+		schemacheck(t, writeReport(t, t.TempDir(), raw))
+	}
+}
+
+// S3: a fault while acquiring the policy (before the handshake) still gives a
+// report, with the policy metadata marked unavailable and no rules listed.
+func TestFaultDuringPolicyAcquisition(t *testing.T) {
+	t.Setenv(faultEnv, "hang-policy")
+	start := time.Now()
+	code, raw, _ := run(t, "--timeout", "1s", "--policy", repoPolicy, "../../demo/clean")
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("took %s", elapsed)
+	}
+	r := decode(t, raw)
+	if code != 2 || len(r.Rules) != 0 || len(r.Diagnostics) != 1 || r.Diagnostics[0].Kind != "analyzer_timeout" {
+		t.Fatalf("exit %d rules %+v diags %+v; want 2, rules=[], one analyzer_timeout", code, r.Rules, r.Diagnostics)
+	}
+	if !strings.Contains(string(raw), "policy metadata unavailable") || !strings.Contains(string(raw), `"sha256": null`) {
+		t.Fatalf("abort report must mark the policy metadata unavailable:\n%s", raw)
+	}
+	schemacheck(t, writeReport(t, t.TempDir(), raw))
 }

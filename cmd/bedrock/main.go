@@ -39,6 +39,7 @@ import (
 	"github.com/LavishGent/bedrock/internal/analyze"
 	"github.com/LavishGent/bedrock/internal/check"
 	"github.com/LavishGent/bedrock/internal/facts"
+	"github.com/LavishGent/bedrock/internal/fsutil"
 	"github.com/LavishGent/bedrock/internal/policy"
 )
 
@@ -47,8 +48,10 @@ const (
 	// memExit is the child's exit status when its memory watchdog trips.
 	memExit = 86
 	// faultEnv injects faults into the child for the supervisor's regression
-	// tests: "panic" (a goroutine panics), "hang" (never finishes), "alloc"
-	// (allocates without bound). It is test-only and has no other effect.
+	// tests: "hang-policy" (hangs while acquiring the policy, before the
+	// handshake), "panic" (a goroutine panics), "hang" (never finishes),
+	// "alloc" (allocates without bound). It is test-only and has no other
+	// effect.
 	faultEnv = "BEDROCK_INTERNAL_FAULT"
 
 	maxTimeout = time.Hour
@@ -66,6 +69,21 @@ func main() {
 	}
 	os.Exit(runCheck(os.Args[2:], os.Stdout, os.Stderr))
 }
+
+// policyMeta is the bounded policy metadata the child hands to the parent
+// before analysis starts (the handshake), so an abort report never needs
+// fresh policy or target I/O in the parent.
+type policyMeta struct {
+	SHA256 *string     `json:"sha256"`
+	Rules  []ruleIdent `json:"rules"`
+}
+
+type ruleIdent struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+}
+
+const maxMetaBytes = 1 << 20
 
 // payload is what the child hands back to the parent.
 type payload struct {
@@ -115,16 +133,22 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		label = filepath.ToSlash(filepath.Join(dir, ".bedrock", "policy.toml"))
 	}
 
-	p, abortKind, abortMsg := supervise(dir, label, *timeout, *memMiB, stderr)
+	p, abortKind, abortMsg, meta := supervise(dir, label, *timeout, *memMiB, stderr)
 	if p == nil {
-		mp, _ := analyze.ModulePath(dir)
-		pr := policy.Load(label, mp)
+		// The abort report uses only what the child handed over before
+		// analysis; the parent never re-reads the policy or the target.
+		var sum *string
 		var rules []policy.Rule
-		if pr.Policy != nil {
-			rules = pr.Policy.Rules
+		if meta != nil {
+			sum = meta.SHA256
+			for _, r := range meta.Rules {
+				rules = append(rules, policy.Rule{ID: r.ID, Kind: r.Kind})
+			}
+		} else {
+			abortMsg += " (policy metadata unavailable: the analysis process aborted before reporting it, so no rule is listed)"
 		}
 		d := facts.NewDiagnostic(abortKind, "error", nil, nil, abortMsg, nil)
-		p = &payload{Report: check.PolicyOnly(label, pr.SHA256, d, rules)}
+		p = &payload{Report: check.PolicyOnly(label, sum, d, rules)}
 	}
 	for _, s := range p.NotEvaluated {
 		fmt.Fprintln(stderr, "bedrock:", s)
@@ -156,23 +180,34 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 
 // supervise runs the analysis child and returns its payload, or nil with the
 // run-level diagnostic kind and message describing why it produced none.
-func supervise(dir, label string, timeout time.Duration, memMiB int64, stderr io.Writer) (*payload, string, string) {
+func supervise(dir, label string, timeout time.Duration, memMiB int64, stderr io.Writer) (*payload, string, string, *policyMeta) {
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, "analyzer_crash", "cannot locate the bedrock executable: " + err.Error()
+		return nil, "analyzer_crash", "cannot locate the bedrock executable: " + err.Error(), nil
 	}
 	tmp, err := os.MkdirTemp("", "bedrock-*")
 	if err != nil {
-		return nil, "analyzer_crash", "cannot create a temporary directory: " + err.Error()
+		return nil, "analyzer_crash", "cannot create a temporary directory: " + err.Error(), nil
 	}
 	defer os.RemoveAll(tmp)
 	result := filepath.Join(tmp, "result.json")
-	cmd := exec.Command(exe, childCmd, "--result", result, "--mem-limit-mib", strconv.FormatInt(memMiB, 10),
-		"--policy", label, dir)
+	metaPath := filepath.Join(tmp, "meta.json")
+	abort := func(kind, msg string) (*payload, string, string, *policyMeta) {
+		var m *policyMeta
+		if raw, err := fsutil.ReadRegular(metaPath, maxMetaBytes); err == nil {
+			var mm policyMeta
+			if json.Unmarshal(raw, &mm) == nil {
+				m = &mm
+			}
+		}
+		return nil, kind, msg, m
+	}
+	cmd := exec.Command(exe, childCmd, "--result", result, "--meta", metaPath,
+		"--mem-limit-mib", strconv.FormatInt(memMiB, 10), "--policy", label, dir)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &errBuf, n: 64 << 10}
 	if err := cmd.Start(); err != nil {
-		return nil, "analyzer_crash", "cannot start the analysis process: " + err.Error()
+		return abort("analyzer_crash", "cannot start the analysis process: "+err.Error())
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -184,15 +219,15 @@ func supervise(dir, label string, timeout time.Duration, memMiB int64, stderr io
 	case <-timer.C:
 		_ = cmd.Process.Kill()
 		<-done
-		return nil, "analyzer_timeout", fmt.Sprintf("analysis exceeded the wall-clock limit %s and was killed", timeout)
+		return abort("analyzer_timeout", fmt.Sprintf("analysis exceeded the wall-clock limit %s and was killed", timeout))
 	}
 	st := cmd.ProcessState
 	peak := peakRSSMiB(st)
 	switch {
 	case st.ExitCode() == memExit || peak > memMiB:
-		return nil, "analyzer_memory_limit", fmt.Sprintf("analysis exceeded the memory limit of %d MiB (peak RSS %d MiB)", memMiB, peak)
+		return abort("analyzer_memory_limit", fmt.Sprintf("analysis exceeded the memory limit of %d MiB (peak RSS %d MiB)", memMiB, peak))
 	case waitErr != nil || !st.Success():
-		return nil, "analyzer_crash", fmt.Sprintf("analysis process failed (%s): %s", st.String(), firstPanicLine(errBuf.String()))
+		return abort("analyzer_crash", fmt.Sprintf("analysis process failed (%s): %s", st.String(), firstPanicLine(errBuf.String())))
 	}
 	raw, err := os.ReadFile(result)
 	var p payload
@@ -200,15 +235,16 @@ func supervise(dir, label string, timeout time.Duration, memMiB int64, stderr io
 		err = json.Unmarshal(raw, &p)
 	}
 	if err != nil || p.Report == nil {
-		return nil, "analyzer_crash", "analysis process exited without a readable result"
+		return abort("analyzer_crash", "analysis process exited without a readable result")
 	}
-	return &p, "", ""
+	return &p, "", "", nil
 }
 
 // childMain runs the analysis and writes the payload to --result.
 func childMain(args []string) int {
 	fs := flag.NewFlagSet(childCmd, flag.ContinueOnError)
 	result := fs.String("result", "", "")
+	metaPath := fs.String("meta", "", "")
 	memMiB := fs.Int64("mem-limit-mib", 4096, "")
 	policyPath := fs.String("policy", "", "")
 	if err := fs.Parse(args); err != nil || *result == "" || fs.NArg() != 1 {
@@ -226,9 +262,27 @@ func childMain(args []string) int {
 			}
 		}
 	}()
-	injectFault(os.Getenv(faultEnv))
+	fault := os.Getenv(faultEnv)
+	if fault == "hang-policy" { // fault during policy acquisition: before the handshake
+		select {}
+	}
+	opts := check.Options{Dir: fs.Arg(0), PolicyPath: *policyPath, PolicyLabel: *policyPath}
+	pr := check.LoadPolicy(opts)
+	if *metaPath != "" {
+		m := policyMeta{SHA256: pr.SHA256, Rules: []ruleIdent{}}
+		if pr.Policy != nil {
+			for _, r := range pr.Policy.Rules {
+				m.Rules = append(m.Rules, ruleIdent{ID: r.ID, Kind: r.Kind})
+			}
+		}
+		if err := writeAtomic(*metaPath, m); err != nil {
+			fmt.Fprintln(os.Stderr, "bedrock:", err)
+			return 2
+		}
+	}
+	injectFault(fault)
 
-	out := check.Run(contextBackground(), check.Options{Dir: fs.Arg(0), PolicyPath: *policyPath, PolicyLabel: *policyPath})
+	out := check.RunWithPolicy(contextBackground(), opts, pr)
 	p := payload{Report: out.Report, Shards: out.Shards}
 	for _, ru := range out.NotEvaluated {
 		p.NotEvaluated = append(p.NotEvaluated, fmt.Sprintf("rule %q (%s) is NOT EVALUATED by this build (forbid_import only); it is reported INDETERMINATE", ru.ID, ru.Kind))
@@ -242,6 +296,20 @@ func childMain(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+// writeAtomic writes v as JSON via a temporary file and rename, so the
+// parent never sees a partial handshake.
+func writeAtomic(path string, v any) error {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func injectFault(f string) {
