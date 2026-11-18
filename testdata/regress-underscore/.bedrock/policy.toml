@@ -1,0 +1,18 @@
+# Regression fixture (review N2): the import edge to the explicitly imported
+# _helper package must exist, so this rule reports it.
+version = 1
+module = "example.com/underscore"
+
+[boundary.all]
+packages = ["example.com/underscore/**"]
+
+[boundary.helper]
+packages = ["example.com/underscore/_helper"]
+
+[[rule]]
+id = "no-helper-import"
+kind = "forbid_import"
+scope = "all"
+target = "helper"
+message = "Nothing may import the _helper package."
+remediation.message = "Remove the import."

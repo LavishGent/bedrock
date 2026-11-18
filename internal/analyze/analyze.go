@@ -253,7 +253,13 @@ func Load(ctx context.Context, dir string) *Result {
 		})
 		u.Shard.Imports = u.Imports
 	}
-	res.inventoryExcluded(abs, res.Units, excludedDirs)
+	compiledFiles := map[string]bool{} // every file the loader compiled, any package
+	for _, p := range all {
+		for _, f := range p.CompiledGoFiles {
+			compiledFiles[filepath.Clean(f)] = true
+		}
+	}
+	res.inventoryExcluded(abs, res.Units, excludedDirs, compiledFiles)
 	return res
 }
 
@@ -759,7 +765,7 @@ func collisions(syms []facts.Symbol) ([]facts.Symbol, []string) {
 // contract and plan section 7: the report lists excluded packages and
 // files). Analysis membership comes from the loader (units and
 // excludedDirs); the walk only inventories. Traversal errors fail closed.
-func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo, excludedDirs map[string]string) {
+func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo, excludedDirs map[string]string, compiledFiles map[string]bool) {
 	analyzed := map[string]bool{}
 	for _, u := range units {
 		if u.Origin == "module" && u.Shard.Unit.SourceStatus == "compiled" {
@@ -777,16 +783,18 @@ func (r *Result) inventoryExcluded(root string, units map[string]*UnitInfo, excl
 		rel, _ := filepath.Rel(root, p)
 		return filepath.ToSlash(rel)
 	}
-	// subtree records every Go file under dir with reason ignored_by_go (the
-	// go command never considers them for this module); the package entry
-	// carries the precise reason.
+	// subtree records the Go files under dir that the loader did not
+	// compile, with reason ignored_by_go: ./... skips nested modules,
+	// testdata and _ or . directories, so their files are excluded unless an
+	// explicit import made the loader compile them (those belong to a unit
+	// and are left out). The package entry carries the precise reason.
 	subtree := func(dir, reason string) error {
 		var files []string
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !d.IsDir() && strings.HasSuffix(p, ".go") {
+			if !d.IsDir() && strings.HasSuffix(p, ".go") && !compiledFiles[filepath.Clean(p)] {
 				files = append(files, p)
 			}
 			return nil

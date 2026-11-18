@@ -589,3 +589,35 @@ remediation.message = "Remove unsafe."
 	assertDisjoint(t, raw)
 	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }
+
+// N2: app.go explicitly imports a package in a _-prefixed directory. Both are
+// analyzed units, the import edge is present, and helper.go is not listed as
+// an excluded file; the unimported _other stays excluded.
+func TestExplicitlyImportedUnderscorePackage(t *testing.T) {
+	code, raw, facts := run(t, "../../testdata/regress-underscore")
+	r := decode(t, raw)
+	if code != 1 || len(r.Violations) != 1 || r.Violations[0].Location.File != "app.go" {
+		t.Fatalf("exit %d violations %+v; want 1 with the app.go -> _helper import edge", code, r.Violations)
+	}
+	var pk struct {
+		Packages struct {
+			Included []string `json:"included"`
+		} `json:"packages"`
+	}
+	_ = json.Unmarshal(raw, &pk)
+	if fmt.Sprint(pk.Packages.Included) != "[example.com/underscore example.com/underscore/_helper]" {
+		t.Fatalf("included = %v, want both units", pk.Packages.Included)
+	}
+	files := map[string]string{}
+	for _, f := range r.Packages.ExcludedFiles {
+		files[f.Path] = f.Reason
+	}
+	if _, listed := files["_helper/helper.go"]; listed {
+		t.Fatalf("_helper/helper.go is compiled but listed in excluded_files: %v", files)
+	}
+	if files["_other/other.go"] != "ignored_by_go" {
+		t.Fatalf("_other/other.go must stay excluded: %v", files)
+	}
+	assertDisjoint(t, raw)
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
+}
