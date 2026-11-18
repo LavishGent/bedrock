@@ -46,7 +46,7 @@ Bedrock uses a **Rust core engine** coordinating **native language analyzer work
         +-----------------------+       +-----------------------+
 ```
 
-### Target Monorepo Structure (`/Users/lavishgent/Desktop/bedrock`)
+### Target Monorepo Structure (repository root)
 
 - `crates/bedrock-dsl/` — Lexer, parser, AST, semantic validation, typechecker, and Datalog IR compiler.
 - `crates/bedrock-facts/` — Shared Semantic Fact Graph types, JSON IPC schema, shard hashing, and serialization.
@@ -97,7 +97,13 @@ Analyzers must emit `diagnostic` records whenever precision is compromised:
 - `unresolved_dynamic_call`: reflection, `eval`, or unresolvable function pointer inside a governed unit.
 - `unresolved_dynamic_url`: `http_call` whose URL path cannot be statically resolved (e.g., `fetch(base + dynamicPath)`).
 
+- `unresolved_dynamic_route`: a route registration whose path or handler cannot be statically resolved (e.g., routes built in loops or through helper functions the analyzer cannot follow).
+
 If a governed unit has any `error`-severity diagnostic—or an `unresolved_dynamic_*` diagnostic affecting an active invariant scope—the engine marks the run `INDETERMINATE` (exit `2`).
+
+**Definition of "affecting an active invariant scope":** a diagnostic affects an invariant when its `unit_id` is in that invariant's `scope`, **or** when the diagnostic's location lies in a symbol that is in the invariant's call-graph slice (any symbol that can reach, or be reached from, a symbol the invariant's prohibited/required pattern matches). Diagnostics in units outside every active invariant's scope and slice are reported as warnings and do not change the verdict.
+
+**Empty-match rule:** a `boundary(...)` or `concept(...)` reference that resolves to zero units/symbols/routes in the analyzed repository is a configuration error (`INDETERMINATE`), preventing a layout change from silently disabling an invariant.
 
 ---
 
@@ -207,6 +213,7 @@ invariant "frontend cannot call internal backend endpoints" {
 4. **IR Lowering:** Compiles AST invariants into a **Typed Relational / Datalog IR**:
    - Base EDB relations populated from `UnitShard` facts + materialized bindings (`in_boundary(UnitOrRoute, Boundary)`, `has_concept(Sym, Concept)`).
    - Derived IDB rules for call-path reachability (`call_reach(Caller, Callee)` is reflexive for symbols inside a boundary and transitive along `call` edges). A callsite `(Caller, Callee)` satisfies `unless reachable_from: B` when `Caller` is inside boundary `B` or every non-`B` call path reaching `Caller` traverses `B` (preventing bypass via shared helpers).
+   - **Formal definition of `reachable_from: B`.** Let `G` be the merged `call` graph, `In(B)` the symbols inside boundary `B`, and `Entry` the symbols with no incoming call edges plus all `route` handlers. A callsite with caller `c` satisfies the guard iff `c ∈ In(B)`, or every path in `G` from any `e ∈ Entry` to `c` contains at least one symbol in `In(B)`. If `c` is unreachable from every `Entry`, the guard is **not** satisfied (conservative). Where the call graph is over-approximated (Go CHA fallback), extra paths can only make the guard fail, which is safe. Where an `unresolved_dynamic_call` diagnostic exists on any path to `c`, the result is `INDETERMINATE`, not `PASS`.
    - Violation heads: `violation(RuleId, PrimaryLoc, RemediationId)` derived deterministically when prohibited patterns hold and exception/reachability guards fail.
 
 ---
@@ -222,7 +229,7 @@ invariant "frontend cannot call internal backend endpoints" {
 ### Incremental Module-Sharded Cache
 
 - Cache directory: `.bedrock/cache/` (gitignored, keyed by `analyzer_version + schema_version + unit_id`).
-- Cache key per unit: `sha256(unit_content_hash + sorted(direct_dep_hashes) + active_adapters)`.
+- Cache key per unit: `sha256(analyzer_binary_version + schema_version + unit_content_hash + sorted(direct_dep_hashes) + active_adapters)`.
 - On `bedrock check --diff <base>..<head>` (or `--changed <paths>`):
   1. Compute modified files via `git diff --name-only` (or explicit path list).
   2. Map changed files to owning `unit` IDs, then compute transitive reverse-dependent units from the cached `import` graph.
@@ -281,7 +288,8 @@ JSON output (`bedrock check --format json`):
 
 - `.github/workflows/bedrock.yml` triggers on `pull_request`.
 - **Tamper Resistance:**
-  1. `.bedrock/**` and `.github/workflows/bedrock.yml` are protected in `.github/CODEOWNERS` requiring security/architecture maintainer review.
+  1. `.bedrock/**`, `packs/**`, and `.github/workflows/bedrock.yml` are protected in `.github/CODEOWNERS` requiring security/architecture maintainer review.
+  1a. The `bedrock` binary and analyzer workers are installed in CI from a pinned, checksummed release artifact, never built from the PR workspace. Packs are loaded from the base-branch policy bundle, not the PR tree.
   2. In CI, the workflow checks out the **base branch's** `.bedrock/` directory into a temporary policy bundle directory and runs `bedrock check --policy-dir <base-policy-dir>` against the PR workspace, ensuring an untrusted agent PR cannot modify rules or bindings to self-approve.
   3. On non-zero exit (`1` or `2`), CI uploads the JSON report artifact, renders violations in the GitHub Job Summary, and fails the required status check.
 
