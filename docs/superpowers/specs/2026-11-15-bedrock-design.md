@@ -213,7 +213,7 @@ invariant "frontend cannot call internal backend endpoints" {
 4. **IR Lowering:** Compiles AST invariants into a **Typed Relational / Datalog IR**:
    - Base EDB relations populated from `UnitShard` facts + materialized bindings (`in_boundary(UnitOrRoute, Boundary)`, `has_concept(Sym, Concept)`).
    - Derived IDB rules for call-path reachability (`call_reach(Caller, Callee)` is reflexive for symbols inside a boundary and transitive along `call` edges). A callsite `(Caller, Callee)` satisfies `unless reachable_from: B` when `Caller` is inside boundary `B` or every non-`B` call path reaching `Caller` traverses `B` (preventing bypass via shared helpers).
-   - **Formal definition of `reachable_from: B`.** Let `G` be the merged `call` graph, `In(B)` the symbols inside boundary `B`, and `Entry` the symbols with no incoming call edges plus all `route` handlers. A callsite with caller `c` satisfies the guard iff `c ∈ In(B)`, or every path in `G` from any `e ∈ Entry` to `c` contains at least one symbol in `In(B)`. If `c` is unreachable from every `Entry`, the guard is **not** satisfied (conservative). Where the call graph is over-approximated (Go CHA fallback), extra paths can only make the guard fail, which is safe. Where an `unresolved_dynamic_call` diagnostic exists on any path to `c`, the result is `INDETERMINATE`, not `PASS`.
+   - **Formal definition of `reachable_from: B`.** Let `G` be the merged `call` graph, `In(B)` the symbols inside boundary `B`, and `Entry` the symbols with no incoming call edges plus all `route` handlers. A callsite with caller `c` satisfies the guard iff `c ∈ In(B)`, or every path in `G` from any `e ∈ Entry` to `c` contains at least one symbol in `In(B)`. If `c` is unreachable from every `Entry`, the guard is **not** satisfied (conservative). `Entry` is derived once from the final merged graph and held fixed while testing the graph with `B` removed; the guarantee is relative to that set. Over-approximated edges are not monotonically safe when `Entry` comes from indegree: a spurious edge into a symbol removes it from `Entry` and can turn a fail into a pass. Membership in `In(B)` is checked first, so an unreachable caller inside `B` passes. Where an `unresolved_dynamic_call` diagnostic exists on any path to `c`, the result is `INDETERMINATE`, not `PASS`.
    - Violation heads: `violation(RuleId, PrimaryLoc, RemediationId)` derived deterministically when prohibited patterns hold and exception/reachability guards fail.
 
 ---
@@ -234,7 +234,7 @@ invariant "frontend cannot call internal backend endpoints" {
   1. Compute modified files via `git diff --name-only` (or explicit path list).
   2. Map changed files to owning `unit` IDs, then compute transitive reverse-dependent units from the cached `import` graph.
   3. Re-run `bedrock-analyzer-go` / `bedrock-analyzer-ts` **only** on dirty units + reverse dependents; read unmodified units from cached `UnitShard` JSON files.
-  4. Merge all shards into the full repository Semantic Fact Graph and run the fixed-point Datalog evaluator—guaranteeing exactness for global `reachable_from` and cross-service rules.
+  4. Merge all shards into the full repository Semantic Fact Graph and run the fixed-point Datalog evaluator. Exactness for global `reachable_from` and cross-service rules holds only if global call inference is recomputed or its true dependencies are tracked (see the known limitation below).
 - **Known limitation (to resolve before the cache is built):** Go call facts come from whole-program VTA analysis. A change in one package can alter outgoing indirect-call edges of an unchanged dependency (for example a callback passed into a helper), so reverse-dependents alone do not guarantee exactness. Cache syntax- and type-local facts per unit, and recompute global call inference on every run, or track the real global dependencies.
 - If cache metadata is missing, corrupt, or `bindings.toml`/pack versions changed, fall back cleanly to full analysis.
 
@@ -242,6 +242,7 @@ invariant "frontend cannot call internal backend endpoints" {
 
 - Exit `0`: `PASS` — zero violations and zero fail-safe indeterminacies.
 - Exit `1`: `VIOLATION` — one or more policy violations detected.
+- Precedence: any violation gives `1`; otherwise any relevant indeterminacy gives `2`; otherwise `0`. All diagnostics are reported in every case.
 - Exit `2`: `INDETERMINATE` — parse/type failure, worker crash, invalid policy/binding config, or unresolved dynamic construct in governed scope.
 
 JSON output (`bedrock check --format json`):

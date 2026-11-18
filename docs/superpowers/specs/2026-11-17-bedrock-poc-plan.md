@@ -55,7 +55,11 @@ Before the analyzer is built, pin a minimal versioned JSON schema and an example
 
 ### `reachable_from` (decision 4 detail)
 
-For callsite caller `c` and approved boundary `B`: the guard holds iff `c` is in `B`, or removing every symbol in `B` from the graph leaves no path from any `Entry` symbol to `c`. A caller unreachable from every `Entry` fails the guard. Over-approximation from CHA or multiple known VTA targets can only make the guard fail. Fixtures must cover shared helpers, cycles, exported helpers that are not entries, closures and interface dispatch.
+For callsite caller `c` and approved boundary `B`: the guard holds iff `c` is in `B`, or removing every symbol in `B` from the graph leaves no path from any `Entry` symbol to `c`. A caller unreachable from every `Entry` fails the guard, **unless it is inside `B`**: membership in `B` is checked first and passes, so an unreachable caller inside `B` passes.
+
+`Entry` is derived once from the final merged graph and held fixed while testing the graph with `B` removed. The guarantee is relative to that graph-derived `Entry` set. Over-approximation is **not** monotonically safe when `Entry` comes from indegree: a spurious edge can remove a symbol from `Entry` and turn a fail into a pass. Counterexample fixture: `B={b}`, edges `b->c`, `u->c`, `c->sql`, no handlers. `Entry={b,u}`, so `c` fails. Add a spurious `b->u` edge and `Entry={b}`, so `c` passes. Fixtures must cover this case, shared helpers, cycles, exported helpers that are not entries, closures and interface dispatch.
+
+Step 0 pins the analysis universe: the transitive closure of function bodies from the loaded module packages, including dependency bodies, with the policy for bodyless functions stated. Step 0 also records the diagnostics that standard-library and dependency bodies produce on the clean demo. Libraries are not silently exempted to obtain a `PASS`.
 
 ## 5. Policy contract
 
@@ -74,14 +78,15 @@ Publish a small versioned matrix before implementing `require_middleware`. First
 
 - Literal routes with direct handler references.
 - `chi`: `Get`, `Post`, `Put`, `Delete`, `Method`, `Use`, and statically nested `Group`, `Route` and `With`. Effective middleware is computed per individual route.
-- `net/http`: `HandleFunc` and `Handle` on `http.DefaultServeMux` or a locally constructed `ServeMux`, with pattern normalization defined for method, host and path forms.
+- `net/http`: `HandleFunc` and `Handle` on `http.DefaultServeMux` or a locally constructed `ServeMux`, with pattern normalization defined for method, host and path forms (to be written before step 3, with accepted and rejected code examples).
+- One direct auth wrapper form is supported: `mux.Handle(pattern, auth.RequireAuth(handler))` where `RequireAuth` is the approved middleware and `handler` is a direct reference. Any other wrapper yields a diagnostic. If the demo's `net/http` route does not use this form, it must be a documented policy exception.
 - Deferred: `Mount`, aliased router values, helper-function registration, conditional middleware, loops, and general interprocedural router interpretation.
 
 A recognized but unsupported registration, handler wrapper or middleware form yields a diagnostic that affects `require_middleware`. It never disappears and never counts as authenticated. A router registered in a helper package outside the rule's package scope also yields this diagnostic.
 
 ## 7. INDETERMINATE triggers
 
-Always `2`:
+Conditions that make the run indeterminate (verdict `2` unless a violation exists, per the verdict table in section 4):
 
 - A package in a governed rule's scope fails to load or type-check.
 - Invalid or missing `policy.toml`, a referenced boundary or concept that matches nothing, or zero rules.
@@ -103,7 +108,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 
 ## 8. Build order
 
-0. **Schema and spikes.** Pin the JSON shard and report schema with examples (section 3). Pin Go and `x/tools` versions. Run a bounded SSA, CHA and VTA spike on the demo with explicit timeout and memory expectations, and record the results.
+0. **Schema and spikes.** Pin the JSON shard and report schema with examples (section 3). Pin Go and `x/tools` versions and the build profile. Create a minimal compilable spike module under `spike/` (a repo package, a handler, a `database/sql` call, one `chi` route). The full demo states stay in step 1. Run a bounded SSA, CHA and VTA spike on it with explicit timeout and memory expectations, and record the results and the standard-library diagnostics.
 1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in all states).
 2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
 3. Route and middleware extraction per the support matrix. `require_middleware`.
@@ -124,9 +129,9 @@ The POC keeps the parent spec's protections (invariant 2 and the CI section):
 Mini service (`demo/`):
 
 - A few `chi` routes and one plain `net/http` route.
-- One repo package (approved boundary), one auth middleware, an `internal/auth/private` subpackage that policy forbids other packages from importing, and a billing package. All fixtures compile; Go's own `internal` rule is never violated.
+- One repo package (approved boundary), one auth middleware, an `internal/auth/private` subpackage that policy forbids other packages from importing, and a billing package. The `clean` and `violating` fixtures compile, and Go's own `internal` rule is never violated in them.
 - Behavior tests, including an auth test that rejects a no-op middleware.
-- States: `violating` (one violation per rule), `clean` (passes), and a separate `broken` fixture with an illegal Go import to exercise `INDETERMINATE` from a load failure.
+- States: `violating` (one violation per rule), `clean` (passes), and a separate `broken` fixture with an illegal Go import to exercise `INDETERMINATE` from a load failure. The `broken` fixture lives in its own module under `testdata/broken/`, so ordinary package loads of the demo never see it.
 
 Automated acceptance matrix:
 
@@ -141,7 +146,10 @@ Automated acceptance matrix:
 ## 11. Coordination
 
 - `[w] ticket gate waived by operator (2026-11-17): no tickets for this POC.` Work is tracked by the build order in section 8 and this file. No `coordinator.json` exists, so defaults apply.
-- Design review: Codex, 2026-11-17, approve-with-changes. Blockers B1 to B4 and should-fix S1 to S6 are addressed in this revision. S7 (cache exactness) is recorded in the parent spec as a limitation to resolve before the cache is built. Operator decisions: keep the parent spec's `Entry` definition, and keep the trust-boundary protections.
+- Design review: Codex, 2026-11-17, approve-with-changes. Re-review at `f695d76`: approve-with-changes, step 0 may start.
+  - Resolved decisions: B1, B3, S3, S4, S5, S6.
+  - Pending artifacts, gated: B2 (graph-derived `Entry` caveat now documented; universe pinned in step 0), B4 (normalization rules and accepted/rejected examples before step 3), S1 (complete `policy.toml` example and glob contract before step 1 parser work), S2 (schema and examples in step 0), N1 (precedence clarified in section 7 and the parent spec).
+  - S7 (cache exactness) is recorded in the parent spec as a limitation to resolve before the cache is built. Operator decisions: keep the parent spec's `Entry` definition, and keep the trust-boundary protections.
 
 ## 12. Open questions
 
