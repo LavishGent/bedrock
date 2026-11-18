@@ -28,15 +28,15 @@ Every exported function and method of `github.com/go-chi/chi/v5` v5.5.0 (root pa
 | `(*Mux).With` | supported | Section 4. |
 | `(*Mux).Group` | supported | Only with a function literal written in place. Otherwise `unsupported_router_form`. |
 | `(*Mux).Route` | supported | Only with a function literal written in place. Otherwise `unsupported_router_form`. |
-| `(*Mux).Handle` | unsupported_router_form | Not in the plan's v1 list. It also accepts a `"METHOD /path"` pattern. |
-| `(*Mux).HandleFunc` | unsupported_router_form | Not in the plan's v1 list. |
-| `(*Mux).MethodFunc` | unsupported_router_form | Not in the plan's v1 list. |
-| `(*Mux).Connect` | unsupported_router_form | Not in the plan's v1 list. `Method("CONNECT", ...)` is supported. |
-| `(*Mux).Head` | unsupported_router_form | Not in the plan's v1 list. |
-| `(*Mux).Options` | unsupported_router_form | Not in the plan's v1 list. |
-| `(*Mux).Patch` | unsupported_router_form | Not in the plan's v1 list. |
-| `(*Mux).Query` | unsupported_router_form | `QUERY` method. Not in the plan's v1 list. |
-| `(*Mux).Trace` | unsupported_router_form | Not in the plan's v1 list. |
+| `(*Mux).Handle` | unsupported_router_form | Not in v1. It also accepts a `"METHOD /path"` pattern. |
+| `(*Mux).HandleFunc` | unsupported_router_form | Not in v1. |
+| `(*Mux).MethodFunc` | unsupported_router_form | Not in v1. |
+| `(*Mux).Connect` | supported | `CONNECT`. Same semantics as `Method("CONNECT", ...)` (coordinator decision, step 3). |
+| `(*Mux).Head` | supported | `HEAD`. Same semantics as `Method("HEAD", ...)` (coordinator decision, step 3). |
+| `(*Mux).Options` | supported | `OPTIONS`. Same semantics as `Method("OPTIONS", ...)` (coordinator decision, step 3). |
+| `(*Mux).Patch` | supported | `PATCH`. Same semantics as `Method("PATCH", ...)` (coordinator decision, step 3). |
+| `(*Mux).Query` | supported | `QUERY`. Same semantics as `Method("QUERY", ...)` (coordinator decision, step 3). |
+| `(*Mux).Trace` | supported | `TRACE`. Same semantics as `Method("TRACE", ...)` (coordinator decision, step 3). |
 | `(*Mux).NotFound` | unsupported_router_form | Installs a fallback handler that is served for unmatched paths, so the analyzer cannot leave it unchecked. |
 | `(*Mux).MethodNotAllowed` | unsupported_router_form | Same reason as `NotFound`. |
 | `(*Mux).Mount` | unsupported_router_form | Deferred (plan section 6). |
@@ -350,6 +350,24 @@ var r chi.Router
 if prod { r = chi.NewRouter() } else { r = devRouter() }
 r.Get("/x", h.X)                                      // receiver merged at a phi: unsupported_router_form
 ```
+
+## 7. Analyzer conformance (step 3)
+
+`internal/analyze/routes.go` implements this matrix on SSA. It builds SSA only for well-typed packages whose imports are all well typed, and it extracts routes from module packages. Routes and `route_middleware` facts go into the shards, and diagnostics carry the reach set out in section 2. The fixtures pin the behavior:
+
+| Fixture | Checked by | What it shows |
+| --- | --- | --- |
+| `chains.Accepted` | `internal/analyze` `TestAcceptedChainsStatic` | Every accepted case yields exactly the section 4 chain, the same chains real chi produces (`chains_test.go`). |
+| `chains.Rejected` | `TestRejectedLateUseStatic` | Every late `Use` yields `unsupported_middleware_form`. The middleware is credited to no route, and every route of the router tree is uncertain. |
+| `surface/unsupported.go`, `conditional/conditional.go` | `TestAnnotatedDiagnostics` | Every `// want <diagnostic>` line gets exactly that diagnostic, and no other line gets one. The annotated lines cover unsupported chi APIs, wrapped handlers, conditional and looped `Use` and registration, phi receivers, helper receivers and escapes, computed middleware, non-constant paths, call-result handlers, named `Group` functions, and same-mux conflicts. Routes with uncertain chains never count as authenticated. |
+| `conditional.SeparateMuxes` | `TestSeparateMuxDuplicatesKept` | Identical patterns on two muxes are both kept, plus a `duplicate_route` warning. |
+| `testdata/routerrules` | `cmd/bedrock` `TestRouterRulesTwoRules` | One direct-wrapper attachment satisfies one rule and violates another. An `except_routes` entry that matches nothing is a warning, and the real unprotected route is still a violation. |
+| synthetic routes | `internal/check` `TestRouteDiagProjection`, `TestMatchRoute` | Known-route chain uncertainty is projected per rule scope and exceptions, while unknown identity reaches every rule. Exception patterns follow the policy contract. |
+
+**Analyzer-side limits (conservative):**
+
+- A registration must run on every normal path of its function. Its block must dominate every return and must not sit in a cycle. Otherwise the registration gets `unsupported_router_form`, the same treatment as "under a condition or in a loop". That includes a registration after an early `return`.
+- A middleware concept may bind only functions of type `func(http.Handler) http.Handler`, and no packs. Anything else is `policy_invalid` (policy contract, section 5). This is checked after loading, because it needs types.
 
 Run all fixtures:
 

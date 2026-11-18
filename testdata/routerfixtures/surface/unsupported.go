@@ -23,12 +23,6 @@ func Unsupported() http.Handler {
 	r.Handle("/handle", http.HandlerFunc(ok))                               // want unsupported_router_form
 	r.HandleFunc("/handlefunc", ok)                                         // want unsupported_router_form
 	r.MethodFunc("GET", "/methodfunc", ok)                                  // want unsupported_router_form
-	r.Connect("/connect", ok)                                               // want unsupported_router_form
-	r.Head("/head", ok)                                                     // want unsupported_router_form
-	r.Options("/options", ok)                                               // want unsupported_router_form
-	r.Patch("/patch", ok)                                                   // want unsupported_router_form
-	r.Query("/query", ok)                                                   // want unsupported_router_form
-	r.Trace("/trace", ok)                                                   // want unsupported_router_form
 	r.NotFound(ok)                                                          // want unsupported_router_form
 	r.MethodNotAllowed(ok)                                                  // want unsupported_router_form
 	r.Mount("/mount", http.HandlerFunc(ok))                                 // want unsupported_router_form
