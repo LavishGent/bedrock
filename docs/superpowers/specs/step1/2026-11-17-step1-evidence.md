@@ -77,7 +77,7 @@ The auth tests sit under `/demo/*/internal/auth/`, which CODEOWNERS protects tog
 
 ## Broken fixture fails to load as intended
 
-`testdata/broken` has its own fixture policy, `testdata/broken/.bedrock/policy.toml` (S6). Its `module` matches and its scope governs `example.com/broken/b`. `testdata/broken/README.md` gives the invocation (`bedrock check --repo testdata/broken --format json`) and the exact assertions: `package_load_error` on `example.com/broken/b` at `b/b.go:6:8`, affecting rule `no-a-root-import` with reason `unit_in_scope`, exit 2, no violations, and no `policy_*` diagnostic.
+`testdata/broken` has its own fixture policy, `testdata/broken/.bedrock/policy.toml` (S6). Its `module` matches and its scope governs `example.com/broken/b`. `testdata/broken/README.md` gives the invocation (`bedrock check testdata/broken`) and the exact assertions: `package_load_error` on `example.com/broken/b` at `b/b.go:6:8`, affecting rule `no-a-root-import` with reason `unit_in_scope`, exit 2, no violations, and no `policy_*` diagnostic.
 
 ```
 $ cd testdata/broken && go build ./...

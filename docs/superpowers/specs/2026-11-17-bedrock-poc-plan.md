@@ -130,6 +130,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 1. Repo scaffold (Go module, `.bedrock/policy.toml`, `demo/` service in all states).
    *Delivered:* `.bedrock/policy.toml`, policy contract `policy/README.md` (S1), router matrix `routers/README.md` (B4), `demo/clean`, `demo/violating`, `testdata/broken`, `.github/CODEOWNERS`, and schema 0.2 (report `assumptions`). Evidence in `step1/2026-11-17-step1-evidence.md`.
 2. Analyzer: package loading, unit, symbol and import facts. `forbid_import` and the report.
+   *Delivered:* `cmd/bedrock`, `internal/{analyze,policy,glob,check,facts}`. Evidence in `step2/2026-11-17-step2-evidence.md`. `require_middleware` and `restrict_concept_to_boundary` are validated but not evaluated (schema 0.3 cannot mark a rule "not evaluated"; reported).
 3. Route and middleware extraction per the support matrix. `require_middleware`.
 4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
 5. Hook and CI examples, plus the by-hand agent demo.

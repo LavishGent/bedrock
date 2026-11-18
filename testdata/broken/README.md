@@ -16,10 +16,10 @@ The rule cannot fire: nothing imports `a`. That leaves the load failure as the o
 
 ## Invocation and expected result
 
-From the repository root, with the step 2 CLI (the policy defaults to `<repo>/.bedrock/policy.toml`):
+From the repository root, with the step 2 CLI. The policy defaults to `MODULE_DIR/.bedrock/policy.toml`. `cmd/bedrock` `TestBrokenFixture` makes these assertions:
 
 ```sh
-bedrock check --repo testdata/broken --format json
+bedrock check testdata/broken
 ```
 
 The test must assert all of the following, and not only the exit code:
