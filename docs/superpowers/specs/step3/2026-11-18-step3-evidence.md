@@ -117,3 +117,29 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerinit; reports + shards): byte-identical
 schemacheck: exit 0 over 385 documents, 0 failures
 ```
+
+## Recheck fixes (Codex recheck of e23f6cd/2e0f416)
+
+Each regression is an isolated module in `cmd/bedrock/probes_test.go`. Each one also runs the probe module's own tests, which send a real `httptest` request to `/private` without credentials and require HTTP 200. That proves the route really is unprotected, so the only correct analyzer answer is non-PASS. Run against the previous `routes.go`, both Codex repros give exit 0 PASS; with the fixes, they give exit 2.
+
+| Item | Regression | Fix | Result |
+| --- | --- | --- | --- |
+| **B1**: a dependency's `type Mux http.ServeMux` with its own `ServeHTTP` registers and serves `/private`; the module converts `http.NewServeMux()` to `*adapter.Mux`, assigns it to `http.Handler` and calls `ServeHTTP` | `TestRecheckB1AdapterConversion` | A `ChangeType` to a defined type other than the recognized router is an escape. Interface `ServeHTTP` is allowed only while the concrete type is proven, and a phi drops the proof. A direct `(*http.ServeMux).ServeHTTP`/`Handler` call is read-only. | before: exit 0, PASS, HTTP 200. Now: `unsupported_router_form`, exit 2 |
+| **B3**: `Register(reg func(*chi.Mux, string, http.HandlerFunc), r *chi.Mux)` calls `reg(r, "/private", h)`, and an external test passes `(*chi.Mux).Get` | `TestRecheckB3ReceiverFirstExternalCaller` | Receiver-first signatures and any dynamic call receiving a router-typed value are registration-shaped | before: exit 0, PASS, HTTP 200. Now: `unsupported_router_form`, exit 2 |
+| **B3** (extension): a router-typed parameter handed to a dependency that registers on it | `TestRecheckRouterParamToDependency` | A static call into unanalyzed code (not module, chi or net/http) with a router-typed argument is unknown identity | `unsupported_router_form`, exit 2; HTTP 200 proven |
+| **NIT**: the `S1-alias-middleware-type` probe row defined `AuthH` but registered `Auth` | | row removed; `TestAliasMiddlewareConcept` binds and registers `AuthH` | |
+
+Results after the fixes: no new false INDETERMINATE, and `demo/clean` and `demo/violating` are unchanged:
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant []
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
+schemacheck: exit 0 over 388 documents, 0 failures
+```
