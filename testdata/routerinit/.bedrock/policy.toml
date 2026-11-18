@@ -1,0 +1,17 @@
+# Review S2 fixture: registrations in init functions and an initializer closure.
+version = 1
+module = "example.com/routerinit"
+
+[boundary.all]
+packages = ["example.com/routerinit/**"]
+
+[concept."auth.middleware"]
+symbols = ["example.com/routerinit.Auth"]
+
+[[rule]]
+id = "needs-auth"
+kind = "require_middleware"
+scope = "all"
+middleware = "auth.middleware"
+message = "Every route must be authenticated."
+remediation.message = "Wrap it with routerinit.Auth."

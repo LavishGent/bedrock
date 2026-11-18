@@ -130,6 +130,7 @@ type extractor struct {
 	diags      []RouteDiag
 	closures   map[string][]facts.Symbol // unit -> closure symbols
 	parents    map[string]*ssa.Function  // closure parent ID -> function (for package initializers)
+	fnByID     map[string]*ssa.Function  // every module function with a body, by symbol ID
 	wrappers   map[string]facts.Symbol   // $bound wrapper ID -> symbol (owner set later)
 }
 
@@ -137,7 +138,7 @@ type extractor struct {
 // routes, middleware chains and diagnostics.
 func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) *extractor {
 	x := &extractor{l: l, pkgOf: map[*types.Package]*packages.Package{}, nested: map[*ssa.Function]bool{},
-		closures: map[string][]facts.Symbol{}, wrappers: map[string]facts.Symbol{}, parents: map[string]*ssa.Function{}}
+		closures: map[string][]facts.Symbol{}, wrappers: map[string]facts.Symbol{}, parents: map[string]*ssa.Function{}, fnByID: map[string]*ssa.Function{}}
 	if len(all) == 0 {
 		return x
 	}
@@ -196,6 +197,7 @@ func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) 
 	}
 	sort.Slice(fns, func(i, j int) bool { return fns[i].String() < fns[j].String() })
 	for _, fn := range fns {
+		x.fnByID[fn.String()] = fn
 		x.scanNested(fn)
 		if fn.Parent() != nil {
 			unit := fn.Pkg.Pkg.Path()
@@ -279,11 +281,19 @@ type op struct {
 	isFunc bool        // package-level function (http.Handle, chi.RegisterMethod)
 }
 
-func isChiRouterType(t types.Type) bool {
+// named strips aliases (type R = chi.Router) and one pointer level and
+// returns the named type, if any.
+func named(t types.Type) (*types.Named, bool) {
+	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
-		t = p.Elem()
+		t = types.Unalias(p.Elem())
 	}
 	n, ok := t.(*types.Named)
+	return n, ok
+}
+
+func isChiRouterType(t types.Type) bool {
+	n, ok := named(t)
 	if !ok || n.Obj().Pkg() == nil || n.Obj().Pkg().Path() != chiPath {
 		return false
 	}
@@ -322,10 +332,7 @@ func classify(c *ssa.CallCommon) *op {
 }
 
 func isServeMux(t types.Type) bool {
-	if p, ok := t.(*types.Pointer); ok {
-		t = p.Elem()
-	}
-	n, ok := t.(*types.Named)
+	n, ok := named(t)
 	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "ServeMux"
 }
 
@@ -469,12 +476,21 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 	}
 	for _, b := range fn.Blocks {
 		for _, ins := range b.Instrs {
+			x.apiValues(fn, unit, ins)
 			ci, ok := ins.(ssa.CallInstruction)
 			if !ok {
 				continue
 			}
 			c := ci.Common()
 			loc := x.pos(fn, ci.Pos())
+			if o := classify(c); o == nil && registrationShaped(c) {
+				// A call through a function value or a foreign interface with
+				// the shape of a registration (pattern, handler) cannot be
+				// resolved to a supported router: fail closed, module-wide.
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form",
+					"call with a registration-shaped signature (pattern, handler) through a function value or interface that cannot be resolved to a supported router", loc)
+				continue
+			}
 			cond := !uncond[b]
 			if _, isGo := ins.(*ssa.Go); isGo {
 				cond = true
@@ -535,15 +551,15 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 			case fixedMethods[o.name] != "" || o.name == "Method":
 				x.register(fn, unit, r, o, cond, loc)
 			case o.name == "Use":
-				x.use(fn, unit, r, o.args[0], cond, loc)
+				x.use(fn, unit, r, o.args[0], ci, cond, loc)
 			case o.name == "With":
-				child := x.with(fn, unit, r, o.args[0], cond, loc)
+				child := x.with(fn, unit, r, o.args[0], ci, cond, loc)
 				if call, ok := ins.(*ssa.Call); ok && child != nil {
 					env[call] = child
 					owned = append(owned, call)
 				}
 			case o.name == "Group":
-				child := x.with(fn, unit, r, nil, false, loc)
+				child := x.with(fn, unit, r, nil, ci, false, loc)
 				if call, ok := ins.(*ssa.Call); ok {
 					env[call] = child
 					owned = append(owned, call)
@@ -601,7 +617,7 @@ func (x *extractor) body(fn *ssa.Function, unit string, child *router, arg ssa.V
 }
 
 // with creates the inline router I := r.With(mws...) (or Group's With()).
-func (x *extractor) with(fn *ssa.Function, unit string, r *router, mws ssa.Value, cond bool, loc *facts.Location) *router {
+func (x *extractor) with(fn *ssa.Function, unit string, r *router, mws ssa.Value, call ssa.CallInstruction, cond bool, loc *facts.Location) *router {
 	if r.kind == httpMux {
 		return nil
 	}
@@ -612,13 +628,13 @@ func (x *extractor) with(fn *ssa.Function, unit string, r *router, mws ssa.Value
 		r.hadDerive = true
 	}
 	if mws != nil {
-		child.own = append(child.own, x.middlewares(fn, unit, mws, "with", cond, loc)...)
+		child.own = append(child.own, x.middlewares(fn, unit, mws, call, "with", cond, loc)...)
 	}
 	return child
 }
 
 // use appends r.Use(mws...) unless the Use is late or conditional.
-func (x *extractor) use(fn *ssa.Function, unit string, r *router, mws ssa.Value, cond bool, loc *facts.Location) {
+func (x *extractor) use(fn *ssa.Function, unit string, r *router, mws ssa.Value, call ssa.CallInstruction, cond bool, loc *facts.Location) {
 	late := r.hadRoute || (r.kind == chiMux && r.hadDerive)
 	if late {
 		d := x.diag(CatChain, unit, fn, "unsupported_middleware_form",
@@ -630,11 +646,11 @@ func (x *extractor) use(fn *ssa.Function, unit string, r *router, mws ssa.Value,
 		x.diags[len(x.diags)-1].Routes = append(x.diags[len(x.diags)-1].Routes, r.routes...)
 		return
 	}
-	r.own = append(r.own, x.middlewares(fn, unit, mws, "use", cond, loc)...)
+	r.own = append(r.own, x.middlewares(fn, unit, mws, call, "use", cond, loc)...)
 }
 
 // middlewares resolves a variadic middleware argument.
-func (x *extractor) middlewares(fn *ssa.Function, unit string, v ssa.Value, source string, cond bool, loc *facts.Location) []ChainEntry {
+func (x *extractor) middlewares(fn *ssa.Function, unit string, v ssa.Value, call ssa.CallInstruction, source string, cond bool, loc *facts.Location) []ChainEntry {
 	unresolved := func(why string) []ChainEntry {
 		d := x.diag(CatChain, unit, fn, "unsupported_middleware_form", why, loc)
 		return []ChainEntry{{Source: source, Loc: loc, Unresolved: true, DiagID: d.Diag.ID}}
@@ -645,29 +661,9 @@ func (x *extractor) middlewares(fn *ssa.Function, unit string, v ssa.Value, sour
 	if c, ok := v.(*ssa.Const); ok && c.IsNil() {
 		return nil
 	}
-	sl, ok := v.(*ssa.Slice)
-	if !ok {
-		return unresolved("middleware list is not written in place (spread or computed slice)")
-	}
-	alloc, ok := sl.X.(*ssa.Alloc)
-	if !ok {
-		return unresolved("middleware list is not written in place")
-	}
-	elems := map[int64]ssa.Value{}
-	for _, ref := range *alloc.Referrers() {
-		ia, ok := ref.(*ssa.IndexAddr)
-		if !ok {
-			continue
-		}
-		idx, ok := ia.Index.(*ssa.Const)
-		if !ok {
-			return unresolved("middleware list has a computed index")
-		}
-		for _, r2 := range *ia.Referrers() {
-			if st, ok := r2.(*ssa.Store); ok && st.Addr == ia {
-				elems[idx.Int64()] = st.Val
-			}
-		}
+	elems, why := varargs(v, call)
+	if why != "" {
+		return unresolved(why)
 	}
 	var out []ChainEntry
 	for i := int64(0); i < int64(len(elems)); i++ {
@@ -683,6 +679,144 @@ func (x *extractor) middlewares(fn *ssa.Function, unit string, v ssa.Value, sour
 		out = append(out, ChainEntry{Sym: sym, Source: source, Loc: loc})
 	}
 	return out
+}
+
+// apiValues diagnoses a registration API used as a value rather than called
+// directly: var register = http.HandleFunc, f := http.Handle, method
+// expressions such as (*chi.Mux).Get, or storing/passing such a function.
+// Its later indirect calls cannot be attributed to a router identity.
+func (x *extractor) apiValues(fn *ssa.Function, unit string, ins ssa.Instruction) {
+	var callee ssa.Value
+	if ci, ok := ins.(ssa.CallInstruction); ok && !ci.Common().IsInvoke() {
+		callee = ci.Common().Value
+	}
+	for _, op := range ins.Operands(nil) {
+		if op == nil || *op == nil || *op == callee {
+			continue
+		}
+		f, ok := (*op).(*ssa.Function)
+		if !ok || !isRegistrationAPI(f) {
+			continue
+		}
+		x.diag(CatIdentity, unit, fn, "unsupported_router_form",
+			"registration API "+f.String()+" is used as a function value (alias, variable, field or argument); its calls cannot be attributed to a router", x.pos(fn, ins.Pos()))
+	}
+}
+
+// isRegistrationAPI reports a chi or net/http function or method (or its
+// thunk/wrapper) that registers routes or middleware.
+func isRegistrationAPI(f *ssa.Function) bool {
+	obj, _ := f.Object().(*types.Func)
+	if obj == nil || obj.Pkg() == nil {
+		return false
+	}
+	sig := obj.Type().(*types.Signature)
+	switch obj.Pkg().Path() {
+	case chiPath:
+		if sig.Recv() == nil {
+			return obj.Name() == "RegisterMethod"
+		}
+		name := obj.Name()
+		return isChiRouterType(sig.Recv().Type()) && (fixedMethods[name] != "" || unsupportedChi[name] ||
+			name == "Method" || name == "Use" || name == "With" || name == "Group" || name == "Route")
+	case httpPath:
+		if obj.Name() != "Handle" && obj.Name() != "HandleFunc" {
+			return false
+		}
+		return sig.Recv() == nil || isServeMux(sig.Recv().Type())
+	}
+	return false
+}
+
+// registrationShaped reports a dynamic call (function value) or an invoke on
+// a non-chi interface whose signature is (string, handler, ...): a pattern
+// and an http.Handler, http.HandlerFunc or func(ResponseWriter, *Request).
+func registrationShaped(c *ssa.CallCommon) bool {
+	if c.StaticCallee() != nil {
+		return false
+	}
+	if c.IsInvoke() && isChiRouterType(c.Value.Type()) {
+		return false
+	}
+	sig := c.Signature()
+	if sig == nil || sig.Params().Len() < 2 {
+		return false
+	}
+	b, ok := types.Unalias(sig.Params().At(0).Type()).Underlying().(*types.Basic)
+	if !ok || b.Kind() != types.String {
+		return false
+	}
+	h := sig.Params().At(1).Type()
+	if isHTTPHandler(h) || isHandlerFunc(h) {
+		return true
+	}
+	fs, ok := types.Unalias(h).Underlying().(*types.Signature)
+	return ok && fs.Params().Len() == 2 && fs.Results().Len() == 0 && isResponseWriter(fs.Params().At(0).Type())
+}
+
+func isResponseWriter(t types.Type) bool {
+	n, ok := types.Unalias(t).(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "ResponseWriter"
+}
+
+// varargs accepts only the slice the compiler builds for in-place variadic
+// arguments (r.Use(A, B)): an Alloc marked "varargs" whose elements are each
+// stored exactly once, by stores in the call's block before the call, and
+// which is used only by those stores and the slice passed to this call.
+// A user-created slice (ms := []...{A}; r.Use(ms...)), a spread or computed
+// slice, or any later overwrite is rejected.
+func varargs(v ssa.Value, call ssa.CallInstruction) (map[int64]ssa.Value, string) {
+	sl, ok := v.(*ssa.Slice)
+	if !ok {
+		return nil, "middleware list is not written in place (spread or computed slice)"
+	}
+	alloc, ok := sl.X.(*ssa.Alloc)
+	// Varargs arrays are always heap-allocated by the builder; aliasing is
+	// excluded below by requiring that the array and slice have no other use.
+	if !ok || alloc.Comment != "varargs" || sl.Low != nil || sl.High != nil || sl.Max != nil {
+		return nil, "middleware list is a user-created slice, not in-place arguments (its elements can be overwritten)"
+	}
+	slRefs := *sl.Referrers()
+	if len(slRefs) != 1 || slRefs[0] != call.(ssa.Instruction) {
+		return nil, "middleware slice is used other than by this call"
+	}
+	callBlock, callIdx := call.Block(), indexIn(call.(ssa.Instruction))
+	elems := map[int64]ssa.Value{}
+	for _, ref := range *alloc.Referrers() {
+		if ref == ssa.Instruction(sl) {
+			continue
+		}
+		ia, ok := ref.(*ssa.IndexAddr)
+		if !ok {
+			return nil, "middleware slice storage is used other than by in-place stores"
+		}
+		idx, ok := ia.Index.(*ssa.Const)
+		if !ok {
+			return nil, "middleware list has a computed index"
+		}
+		refs := *ia.Referrers()
+		if len(refs) != 1 {
+			return nil, "middleware slice element is written or read more than once"
+		}
+		st, ok := refs[0].(*ssa.Store)
+		if !ok || st.Addr != ia || st.Block() != callBlock || indexIn(st) > callIdx {
+			return nil, "middleware slice element is not stored in place before the call"
+		}
+		if _, dup := elems[idx.Int64()]; dup {
+			return nil, "middleware slice element is stored more than once"
+		}
+		elems[idx.Int64()] = st.Val
+	}
+	return elems, ""
+}
+
+func indexIn(ins ssa.Instruction) int {
+	for i, x := range ins.Block().Instrs {
+		if x == ins {
+			return i
+		}
+	}
+	return -1
 }
 
 // directFunc resolves a direct reference to a top-level function or a method
@@ -740,7 +874,7 @@ func isWrapperCall(call *ssa.Call) bool {
 }
 
 func isHandlerFunc(t types.Type) bool {
-	n, ok := t.(*types.Named)
+	n, ok := types.Unalias(t).(*types.Named)
 	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "HandlerFunc"
 }
 
@@ -764,7 +898,7 @@ func wrappedByChi(v ssa.Value) bool {
 }
 
 func isMiddlewareSig(sig *types.Signature) bool {
-	if sig == nil || sig.Recv() != nil && false {
+	if sig == nil {
 		return false
 	}
 	return sig.Params().Len() == 1 && sig.Results().Len() == 1 && !sig.Variadic() &&
@@ -772,7 +906,7 @@ func isMiddlewareSig(sig *types.Signature) bool {
 }
 
 func isHTTPHandler(t types.Type) bool {
-	n, ok := t.(*types.Named)
+	n, ok := types.Unalias(t).(*types.Named)
 	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == httpPath && n.Obj().Name() == "Handler"
 }
 
@@ -942,7 +1076,14 @@ func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
 				continue
 			}
 			if c.IsInvoke() && c.Value == v {
-				continue
+				// Only a recognized chi operation (classified above) or the
+				// read-only ServeHTTP is allowed through an interface; any
+				// other interface (interface{ Handle(...) }) hides a
+				// registration whose identity cannot be checked.
+				if c.Method.Name() == "ServeHTTP" {
+					continue
+				}
+				return "called through interface method " + c.Method.FullName()
 			}
 			if callee := c.StaticCallee(); callee != nil {
 				if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == httpPath {
@@ -1088,10 +1229,24 @@ func (res *Result) attachRoutes(all []*packages.Package, l *locator) {
 			owner[s.ID] = id
 		}
 	}
-	// Closures inside package initializers (pkg.init, or a declared
-	// init#n) have a parent that go/types does not declare: add it.
-	var parentIDs []string
+	// Every function a fact refers to must be a symbol of its owning unit:
+	// closure parents, registered_in and diagnostic symbols. The package
+	// initializer (pkg.init) and declared init functions (pkg.init#n) are not
+	// declared by go/types, so they are added here from SSA.
+	needed := map[string]bool{}
 	for pid := range x.parents {
+		needed[pid] = true
+	}
+	for _, rt := range x.routes {
+		needed[rt.Fact.RegisteredIn] = true
+	}
+	for _, d := range x.diags {
+		if d.Diag.SymbolID != nil {
+			needed[*d.Diag.SymbolID] = true
+		}
+	}
+	var parentIDs []string
+	for pid := range needed {
 		parentIDs = append(parentIDs, pid)
 	}
 	sort.Strings(parentIDs)
@@ -1099,7 +1254,10 @@ func (res *Result) attachRoutes(all []*packages.Package, l *locator) {
 		if _, ok := owner[pid]; ok {
 			continue
 		}
-		pf := x.parents[pid]
+		pf := x.fnByID[pid]
+		if pf == nil || pf.Pkg == nil {
+			continue
+		}
 		unit := pf.Pkg.Pkg.Path()
 		u := res.Units[unit]
 		if u == nil {
