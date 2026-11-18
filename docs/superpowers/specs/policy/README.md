@@ -195,9 +195,17 @@ Further details:
 | `boundary` | boundary name | yes | none |
 
 - **Governed call sites.** A call site is governed when its caller symbol is owned by a module unit in `scope`, and one of its targets is in the concept set (with the wrapper closure, section 5).
-- **Guard.** Each governed call site is checked with `reachable_from: boundary`. It passes if the caller is in `In(B)`, or if every path from every `Entry` to the caller passes through `In(B)`. This is plan decision 4, unchanged.
-- **Violations.** Each failing call site is one violation, located at the call. The evidence chain runs from an `Entry` to the caller, then to the bound callee.
-- **Relevance** of unknown calls follows plan section 7 with owner decision A (section 7 below).
+- **Guard.** Each governed call site is checked with `reachable_from: boundary`. It passes if the caller is in `In(B)`, or if every path from every `Entry` to the caller passes through `In(B)`. This is plan decision 4, unchanged. As the plan states, a caller outside `In(B)` that no `Entry` reaches at all fails: an empty set of paths guards nothing. `Entry` is derived once from the merged graph (`../schema/README.md`, Recovering Entry) and held fixed while `In(B)` is removed.
+- **Violations.** Each failing call site is one violation, located at the call. The evidence chain has these steps:
+  - `entry`: the `Entry` the breadth-first search reached the caller from (absent when no `Entry` reaches it);
+  - `call` steps along a shortest path to the caller, and the `call` to the bound callee;
+  - `concept_binding`: the bound symbol and the concept.
+- **Relevance** of unknown calls follows plan section 7 with owner decision A (section 7 below). A non-exempt unknown call is relevant to the rule:
+  - with reason `unit_in_scope` when its unit is in `scope`;
+  - with reason `reachable_from_governed_entry` when an `Entry` owned by a unit in `scope` reaches its function.
+
+  Otherwise it is a warning. When call facts could not be built because a package failed to load, every load failure makes the rule `INDETERMINATE`.
+- **Evaluated since step 4** (`../step4/2026-11-18-step4-evidence.md`). Before step 4 this kind was listed with `rule_not_evaluated`.
 
 ## 7. Documented assumption: trusted standard library (owner decision A, 2026-11-17)
 

@@ -19,7 +19,9 @@ This README is normative. The JSON Schemas check structure. The rules below cove
 | `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic, plain warnings and three exempted diagnostics. It shows precedence, affected-rule reporting, and assumption counts that reconcile with `exempted_by` attributions. |
 | `examples/report.policy-missing.json`, `report.policy-no-rules.json`, `report.policy-invalid.json` | Policy failures: one diagnostic with relevance `global`, `rules: []`, `INDETERMINATE`, exit 2. |
 | `stdlib-go1.26.11.txt` | The pinned standard-library package inventory (`go list std`, linux/amd64, cgo off), used to check `stdlib` provenance. |
-| `examples/report.demo-clean-step2.json` | Real step 2 output for `demo/clean`. `forbid_import` passes, and the two rules of kinds that step 2 does not evaluate are `INDETERMINATE` through `rule_not_evaluated`, so exit 2. |
+| `examples/report.demo-clean-step2.json` | Real step 2 output for `demo/clean` (historical). `forbid_import` passes, and the two rules of kinds that step 2 does not evaluate are `INDETERMINATE` through `rule_not_evaluated`, so exit 2. Since step 4 the same demo exits 0. |
+| `examples/analysis.demo-clean-step4.json` | Real step 4 manifest for `demo/clean`: 198 units with shard hashes, a universe of 17,205 functions (549 bodyless), Entry count 4,637 and its digest, status `complete`. |
+| `examples/shard.demo-violating-handler-step4.json` | Real step 4 shard for `example.com/demo/internal/handler` in `demo/violating`. It has call sites with static and VTA targets, closure and wrapper symbols, and external symbols. Site `(*example.com/demo/internal/handler.Handlers).Export#1` is the seeded `(*database/sql.DB).QueryContext` call. |
 | `examples/shard.unsafe-builtin.json`, `examples/shard.regressmissing-absent-missing.json` | Real shards: `unsafe` as a `builtin` unit, and a governed in-module package that cannot be loaded (`missing`, origin `module`, with its `package_load_error`). |
 | `tools/` | Generators for the hand-written examples and negatives (see `tools/README.md`). |
 | `examples/invalid/*.json` | Negative fixtures. Each must be rejected with the error text recorded in `examples/invalid/expect.json`. |
@@ -29,7 +31,16 @@ Validate everything (from the repo root). The test accepts every `examples/*.jso
 ```sh
 go test ./spike/schemacheck
 go run ./spike/schemacheck docs/superpowers/specs/schema docs/superpowers/specs/schema/examples/*.json   # one-off, schema chosen by kind
+go run ./spike/schemacheck docs/superpowers/specs/schema OUT/shards/*.json OUT/analysis.json report.json  # one run
 ```
+
+Given a manifest together with shards (and reports) of one run, `schemacheck` also applies the run-level merge checks:
+
+- every manifest unit has exactly one shard, with a matching canonical-JSON hash and profile digest;
+- symbol IDs are unique across shards;
+- external symbols resolve to their owner;
+- the Entry recovered from the shards matches `manifest.entry` when the status is `complete`;
+- each report's `inputs.manifest_sha256` and `shard_count` match the run.
 
 ## Versioning
 
@@ -37,6 +48,13 @@ Every document has `"schema_version": "0.4"` and a `kind`. While the POC is `0.x
 
 Changelog:
 
+- **0.4, step 4 clarifications (compatible, no shape change):**
+  - Symbol IDs: alias resolution and the concrete C1 form (see Symbol IDs).
+  - Abstract interface-method symbols as wrapper origins.
+  - Ownership of predeclared interface methods.
+  - The emission rules for unknown-call diagnostics (Analysis universe).
+  - The run-level `schemacheck` cross-check.
+  - Readers do not parse symbol IDs, so no version bump is needed.
 - **0.4** (step 2 review fixes). These changes are incompatible with 0.3:
   - **Rules not evaluated (B1).** Every configured rule is listed in `rules[]`. A rule whose kind the running build cannot evaluate gets a global diagnostic of the new kind `rule_not_evaluated`. It has relevance `indeterminate` and affects exactly that rule with the new reason `not_evaluated`. The rule is therefore `INDETERMINATE`, and the run exits 2 unless a real violation gives 1. A report is always emitted. See the example `report.demo-clean-step2.json`.
   - **Source status (B2).** Units gain the required `source_status`:
@@ -106,7 +124,13 @@ The base form is go/ssa's `(*ssa.Function).String()` under the pinned `golang.or
 
 The bare go/ssa string is **not** unique. The step 0 spike found 69 colliding names in a universe of 16,966 functions (see `../step0/2026-11-17-ssa-spike.md`). Three canonicalization rules apply:
 
-1. **C1, type-parameter arguments are qualified.** go/ssa builds instances inside generic bodies whose type arguments are still type parameters. The spike found 187 of these. In such an instance, each type parameter used as a type argument is written `Name@<owner ID>`, where the owner is the generic function or type that declares the parameter. For example, `cmp.Less[E]` instantiated inside `slices.pdqsortOrdered` becomes `cmp.Less[E@slices.pdqsortOrdered]`. The generic origin itself keeps its plain form (`cmp.Less`). C1 targets the 11 differing `instance`/`method` groups and the 38 equivalent instance groups seen in the spike. The spike has not yet shown that C1 removes them all; step 2 must re-run the collision check with C1 applied, and C3 catches any that remain.
+1. **C1, type-parameter arguments are qualified.** go/ssa builds instances inside generic bodies whose type arguments are still type parameters. The spike found 187 of these. In such an instance, each type parameter used as a type argument is written `Name@<owner ID>`, where the owner is the generic function or type that declares the parameter. For example, `cmp.Less[E]` instantiated inside `slices.pdqsortOrdered` becomes `cmp.Less[E@slices.pdqsortOrdered]`. The generic origin itself keeps its plain form (`cmp.Less`). C1 targets the 11 differing `instance`/`method` groups and the 38 equivalent instance groups seen in the spike. **Step 4 result:** with C1 and C2 applied, the demo universe (17,205 functions; 70 bare-name collisions) has no collisions, so C3 never fired in any step 4 run. The concrete form follows `(*ssa.Function).RelString`, with one change. When a name depends on instantiated or literal types (an instance's type arguments, or the receiver of a method or wrapper of an instantiated type), every type is written with aliases resolved and package paths in full:
+   - the type parameter as `Name@owner`;
+   - a closure as `<parent ID>$<n>`;
+   - a method as `(<receiver>).<name>`;
+   - a function instance as `<origin ID>[<args>]`.
+
+   go/ssa spells an instance after the first spelling it meets: `os.DirEntry` and `io/fs.DirEntry` are one type. Packages build in parallel, so go/ssa's own string was not stable across runs. The owner of a type parameter is the declared generic function or method that declares it, never a closure that shares it. Plain declared functions and methods keep go/ssa's string, so every policy-bindable ID is unchanged.
 2. **C2, identical wrappers are one symbol.** go/ssa may create several `Function` objects for one wrapper. The spike saw `(*database/sql.driverConn).releaseConn$bound` seven times. They share a canonical ID and are emitted as one symbol. Their bodies are the same instruction sequence, so call-site ordinals line up, and each site's `targets` is the union across copies. For 19 of the 20 wrapper groups the copies already had identical targets. For `(net/http.Handler).ServeHTTP$bound` (5 copies), VTA gave the copies different targets, so the union is an over-approximation. Merging does not change the Entry set, because every target already had an incoming edge. It only adds paths, so it can turn a `reachable_from` pass into a fail but never a fail into a pass. See open issue 2 in the spike note.
 3. **C3, any remaining collision is a failure.** If two distinct functions still share an ID after C1 and C2, the analyzer emits a global `symbol_id_collision` error and the run is indeterminate. IDs are never disambiguated by creation order. go/ssa builds packages in parallel, so creation order is not stable.
 
@@ -116,6 +140,8 @@ The bare go/ssa string is **not** unique. The step 0 spike found 69 colliding na
 - For a closure, the package of its enclosing function.
 - For an instance, the package of its origin.
 - For a wrapper, the package that declares the receiver's named type. The spike found four wrappers (`(*net/http.requestBodyReadError).Error` and similar) that go/ssa leaves without a package; this rule assigns them to `net/http`.
+- **Wrapper origins.** A wrapper's `origin_id` is the method it calls. If that is an interface method, for example the bound or thunk of `(net/http.Handler).ServeHTTP` or promotion through an embedded interface, the interface's unit owns an abstract method symbol with that ID. It has `kind: method`, `has_body: false` and `in_universe: false`, so it is never an Entry and never a call target.
+- **Predeclared interface methods.** `(error).Error` has no package. It is owned by the smallest unit ID whose wrapper refers to it.
 
 ### Call-site IDs
 
@@ -184,6 +210,17 @@ Any failure is a global error, and every rule becomes indeterminate unless a vio
 `universe.definition = all_functions_transitive_closure_v1`. The universe is `ssautil.AllFunctions` over the SSA program built with `ssa.InstantiateGenerics` from every package in the transitive import closure of the module patterns. Every package is loaded with full syntax and types under the pinned build profile, tests excluded. This covers the module, its dependencies and the standard library.
 
 The universe is a superset of the set listed in plan decision 4. It contains every package-level function and method of every runtime type, plus closures, wrappers, generic origin bodies (250 in the spike) and instances, including partially instantiated ones. `symbol.in_universe` marks membership.
+
+**Universe closure (step 4).** Every call target must itself be in the universe. A target outside it is a global `analyzer_crash` error, and call facts are then incomplete. Excluded directories, which the loader selected no files from, contribute no functions.
+
+**Unknown-call diagnostics (step 4).** The analyzer emits:
+
+- `unresolved_interface_call` or `unresolved_dynamic_call` only for a non-static site with **zero** targets (a site with targets is resolved; multiple targets are over-approximation);
+- `bodyless_function` for a site with a bodyless target;
+- `reflection_call` for a static call to `(reflect.Value).Call`, `CallSlice`, `Method`, `MethodByName` or `reflect.MakeFunc`;
+- `unsafe_pointer` once per function that converts to or from `unsafe.Pointer`, with `site_id: null`.
+
+All are `warning` severity, owned by the caller's unit. Call facts are built only when every package loads and type-checks; otherwise the manifest `status` is `load_error` and `call_sites` are empty.
 
 `universe.bodyless_policy = leaf_with_diagnostic_v1`. A bodyless function (assembly, `go:linkname`, or a compiler intrinsic; 549 in the spike, all in the standard library) is a universe member with `has_body: false` and no call sites. Every call site whose target set includes a bodyless function carries a `bodyless_function` diagnostic owned by the caller's unit. Libraries are not exempted. Whether a diagnostic changes a verdict is decided by the evaluator (plan section 7), not by the analyzer.
 

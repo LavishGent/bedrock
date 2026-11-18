@@ -135,6 +135,7 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
    *Delivered:* `internal/analyze/routes.go`, `internal/check/middleware.go`, route and `route_middleware` facts in shards (schema unchanged, 0.4), chi direct methods supported (coordinator decision). Evidence in `step3/2026-11-18-step3-evidence.md`.
    **Supported router form (owner decision 2026-11-18, normative).** `require_middleware` trusts a router only when it is created by a direct `chi.NewRouter`/`chi.NewMux`/`http.NewServeMux` call and fully populated inside one function. The population uses literal patterns and the recognized ops, with in-place varargs middleware. The router may then only be returned, passed directly to an enumerated serving API (or a local, only-served `http.Server`), or handed to a `Group`/`Route` literal. A caller may only serve the result of such a function directly. Every other router value or use is module-wide `unsupported_router_form`. That includes parameters, globals and `DefaultServeMux`, helpers and other factories, conversions, storage, capture, and `go:linkname` exposure. See `routers/README.md`, "Supported router form".
 4. SSA, CHA, VTA call facts. `restrict_concept_to_boundary` with `reachable_from`.
+   *Delivered:* `internal/analyze/callgraph.go` (SSA with instantiated generics, CHA seeding VTA, call sites, universe symbols, unknown-call diagnostics, analysis manifest), `internal/check/boundary.go` (shard merge checks, Entry recomputed once from the merged graph, `reachable_from`, decision A relevance with assumption counts). `restrict_concept_to_boundary` is evaluated, so it no longer gets `rule_not_evaluated`, and `demo/clean` exits 0. Fixtures are in `testdata/step4`. The schema is unchanged at 0.4; symbol ID clarifications are in `schema/README.md`. Evidence in `step4/2026-11-18-step4-evidence.md`.
 5. Hook and CI examples, plus the by-hand agent demo.
 
 ## 9. Trust boundary
@@ -177,6 +178,6 @@ Automated acceptance matrix:
 
 ## 12. Open questions
 
-- VTA run time and memory on the demo with the full analysis universe. Step 0 measured the spike: about 1 s and about 0.75 GiB for 16,966 functions, 99% of them standard library (`step0/2026-11-17-ssa-spike.md`). The demo is re-measured in step 4.
+- ~~VTA run time and memory on the demo with the full analysis universe.~~ Measured in step 4: the supervised analysis of the demo takes about 1.6 s and about 0.95 GiB peak RSS for 17,205 functions and 56,792 call sites, against limits of 120 s and 4096 MiB (`step4/2026-11-18-step4-evidence.md`).
 - ~~How a reachable unknown call is "proven irrelevant"~~ Decided 2026-11-17 (owner decision A, section 7): trusted pinned standard library plus no-possible-target. The contract is in `policy/README.md`.
 - Real-world accuracy is untested until a real Go service is added as a target.
