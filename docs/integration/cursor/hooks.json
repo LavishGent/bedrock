@@ -3,7 +3,8 @@
   "hooks": {
     "stop": [
       {
-        "command": "./docs/integration/cursor/bedrock-stop.sh"
+        "command": "./docs/integration/cursor/bedrock-stop.sh",
+        "loop_limit": 5
       }
     ]
   }

@@ -1,26 +1,24 @@
 #!/usr/bin/env bash
-# Example only. Claude Code hook adapter for bedrock (see README.md here).
+# Example only. Claude Code Stop hook adapter for bedrock (see ../README.md).
 #
-# Claude Code treats a hook's exit status 2 as "blocking": stderr is shown to
-# the model and, for a Stop hook, the agent keeps working. bedrock's own exit
-# codes are mapped onto that:
-#   bedrock 0 (PASS)                     -> hook exit 0 (allow)
-#   bedrock 1 (VIOLATION)                -> hook exit 2 (block, report on stderr)
-#   bedrock 2 (INDETERMINATE, uncertain) -> hook exit 2 (block, report on stderr)
-# INDETERMINATE is uncertainty, not a pass, so it blocks too.
+# It ALWAYS runs the check: there is no early exit on stop_hook_active or
+# any other retry marker, because a previous attempt says nothing about the
+# current code. Claude Code treats hook exit status 2 as blocking: stderr is
+# shown to the model and the agent keeps working. Mapping:
+#   bedrock 0 (PASS)                     -> exit 0 (the agent may stop)
+#   bedrock 1 (VIOLATION)                -> exit 2 (blocked, findings on stderr)
+#   bedrock 2 (INDETERMINATE, uncertain) -> exit 2 (blocked; uncertainty is not a pass)
+#   anything else (runner failure)       -> exit 2 (blocked)
+# The agent cannot finish while the check fails; the human interrupts the
+# session to end a loop that does not converge. This is a repair aid; the
+# authoritative gates are the git pre-commit hook and CI.
 set -u
-input=$(cat)
-# Stop hooks: if Claude is already continuing because of this hook, let it
-# stop rather than loop forever; the human sees the last report.
-if command -v jq >/dev/null 2>&1 &&
-	[ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ]; then
-	exit 0
-fi
+cat >/dev/null # hook input is not needed: the check always runs
 here=$(cd "$(dirname "$0")" && pwd)
 "${BEDROCK_CHECK:-$here/../hooks/bedrock-check.sh}"
 code=$?
 if [ "$code" -eq 0 ]; then
 	exit 0
 fi
-echo "Fix every VIOLATION and INDETERMINATE item above, then re-run until bedrock exits 0. Do not edit .bedrock/." >&2
+echo "bedrock check did not pass (exit $code). Fix every VIOLATION and INDETERMINATE item above, then stop again; the check re-runs every time. Do not edit .bedrock/." >&2
 exit 2

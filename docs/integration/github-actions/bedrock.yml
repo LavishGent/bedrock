@@ -1,18 +1,35 @@
 # EXAMPLE ONLY. This file is not an enabled workflow: GitHub runs only files
-# under .github/workflows/. To adopt it, copy it to .github/workflows/bedrock.yml
-# in the repository being checked (CODEOWNERS already protects that directory),
-# fill in the pinned values marked REPLACE, and make the "bedrock" job a
-# required status check in branch protection (required checks are configured
-# in the repository settings, not in this file).
+# under .github/workflows/. To adopt it:
+#   1. Copy it to .github/workflows/bedrock.yml on the DEFAULT/BASE branch of
+#      the repository being checked. .github/workflows/ must be protected by
+#      CODEOWNERS (this repository's .github/CODEOWNERS already covers it) so
+#      that changes to the checker definition need owner review.
+#   2. Fill in the pinned values marked REPLACE (still placeholders here: no
+#      bedrock release exists yet).
+#   3. In branch protection, make the status check named "bedrock-check"
+#      (the job below) a required check.
 #
-# It implements the trust boundary of the POC plan, section 9:
-#   - policy and bindings (.bedrock/, packs/) come from the BASE branch, never
-#     from the pull request;
-#   - the bedrock binary is a pinned, checksummed release asset, never built
-#     from the pull request;
-#   - Go is pinned to go1.26.11 and the build environment is controlled
-#     (bedrock itself also pins GOOS/GOARCH, CGO_ENABLED=0, GOFLAGS, GOWORK,
-#     GOTOOLCHAIN=local, GOENV=off and GOPACKAGESDRIVER=off for the analysis).
+# Why pull_request_target. This workflow is the trust anchor of the POC plan,
+# section 9: the bedrock binary URL and checksum, the Go pin, the build
+# environment and the policy selection must not be changeable by the pull
+# request under review. With the pull_request trigger GitHub runs the
+# workflow file from the PR's merge commit, so a PR could edit those pins in
+# the same change. With pull_request_target GitHub runs the workflow file from
+# the base branch, so every pin below comes from reviewed, protected code.
+#
+# The price of pull_request_target is that the job runs in the base context.
+# The rules that keep it safe, all followed below:
+#   - minimal read-only permissions (contents: read), no secrets used, and
+#     persist-credentials: false on every checkout;
+#   - the PR head is checked out ONLY as analysis input, into its own
+#     directory (pr/); nothing from it is executed: no PR scripts, tests,
+#     generators, Makefiles or locally defined actions, and no PR-controlled
+#     strings (branch names, titles) are interpolated into run: steps;
+#   - the only program that reads the PR is the pinned bedrock binary, which
+#     loads the code with go/packages and builds SSA; it never runs it
+#     (cgo disabled, GOTOOLCHAIN=local so a PR's go.mod cannot fetch a
+#     toolchain, GOENV=off and GOFLAGS=-mod=readonly);
+#   - policy and bindings (.bedrock/, packs/) come from the base branch.
 #
 # Verdicts: exit 0 PASS passes the check; exit 1 VIOLATION and exit 2
 # INDETERMINATE fail it. Exit 2 means uncertainty, not a pass.
@@ -35,33 +52,37 @@
 name: bedrock (example)
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
 
+concurrency:
+  group: bedrock-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 env:
   # REPLACE with the pinned release and the SHA-256 of its linux/amd64 asset.
-  BEDROCK_VERSION: v0.0.0-poc
-  BEDROCK_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
   BEDROCK_URL: https://github.com/LavishGent/bedrock/releases/download/v0.0.0-poc/bedrock-linux-amd64
+  BEDROCK_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
   # REPLACE with the module directory to analyze, relative to the repo root.
   BEDROCK_MODULE: .
+  # The controlled build environment for every go command in this job.
+  GOTOOLCHAIN: local
+  GOFLAGS: -mod=readonly
+  GOWORK: "off"
+  GOENV: "off"
+  CGO_ENABLED: "0"
 
 jobs:
-  bedrock:
+  bedrock-check:
+    name: bedrock-check
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      # The pull request's code is analyzed, never executed: bedrock loads it
-      # with go/packages and builds SSA; it does not run tests or generators.
-      # Pin third-party actions to full commit SHAs in real use.
-      - name: Check out the pull request (code under analysis)
-        uses: actions/checkout@v4
-        with:
-          path: pr
-          persist-credentials: false
-
+      # Pin third-party actions to full commit SHAs in real use. Only
+      # marketplace actions are used; no action is taken from the PR.
       - name: Check out policy and bindings from the base branch
         uses: actions/checkout@v4
         with:
@@ -72,6 +93,14 @@ jobs:
             .bedrock
             packs
           sparse-checkout-cone-mode: false
+
+      - name: Check out the pull request head as analysis input only
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          persist-credentials: false
 
       - name: Install the pinned Go toolchain
         uses: actions/setup-go@v5
@@ -88,17 +117,14 @@ jobs:
           echo "$BEDROCK_SHA256  $RUNNER_TEMP/bedrock/bedrock" | sha256sum --check --strict
           chmod +x "$RUNNER_TEMP/bedrock/bedrock"
 
-      - name: Download module dependencies (read-only module mode)
+      # Fetches the PR's module dependencies into the module cache. go mod
+      # download only fetches and verifies modules (go.sum, GOSUMDB); it runs
+      # no code from them.
+      - name: Download module dependencies
         working-directory: pr/${{ env.BEDROCK_MODULE }}
-        env:
-          GOFLAGS: -mod=readonly
-          GOWORK: "off"
-          GOTOOLCHAIN: local
         run: go mod download
 
-      - name: bedrock check (policy from the base branch)
-        env:
-          GOTOOLCHAIN: local
+      - name: bedrock check (pinned binary, base-branch policy)
         run: |
           set -uo pipefail
           "$RUNNER_TEMP/bedrock/bedrock" check \
@@ -109,14 +135,14 @@ jobs:
           code=$?
           case "$code" in
             0) echo "bedrock: PASS" ;;
-            1) echo "::error::bedrock: VIOLATION (see bedrock-report.json)" ;;
-            2) echo "::error::bedrock: INDETERMINATE - uncertainty, not a pass (see bedrock-report.json)" ;;
+            1) echo "::error::bedrock: VIOLATION (see the bedrock-report artifact)" ;;
+            2) echo "::error::bedrock: INDETERMINATE - uncertainty, not a pass (see the bedrock-report artifact)" ;;
             *) echo "::error::bedrock: unexpected exit $code" ;;
           esac
           jq -r '.violations[] | "::error file=\(.location.file // ""),line=\(.location.line // 1)::\(.rule_id): \(.message)"' bedrock-report.json || true
           exit "$code"
 
-      - name: Upload the report and facts
+      - name: Upload the report and manifest
         if: always()
         uses: actions/upload-artifact@v4
         with:
