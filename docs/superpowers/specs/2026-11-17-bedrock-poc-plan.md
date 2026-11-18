@@ -139,6 +139,8 @@ Warning only: unknown constructs outside every governed scope and unreachable fr
 
 ## 9. Trust boundary
 
+**`require_middleware` is advisory against adversarial code** (owner decision after the final step 3 review). It is sound for module code in the supported router form with no adversarial dependency. Dependencies or `//go:linkname` that deliberately mutate module-created routers can evade it through the documented known limits L1 and L2 (`routers/README.md`, "Known limits"). Any CI enforcement claim for this rule must say so.
+
 The POC keeps the parent spec's protections (invariant 2 and the CI section):
 
 - CODEOWNERS covers `.bedrock/**`, `packs/**`, the CI workflow and the approved middleware implementation.

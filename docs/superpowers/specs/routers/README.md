@@ -213,6 +213,17 @@ There are no interprocedural coverage summaries. The only whole-module fact is a
 
 The no-false-positive tests are `TestRouterAuditNoFalsePositives` and `TestRouterOriginLocalServerNoFalsePositive`. In them, a single function that builds, registers and returns a router, and a caller that serves it through `ListenAndServe` or a local `http.Server`, stay exit 0.
 
+### Known limits (owner decision, after the final review of `fae5790`)
+
+These two gaps in the supported form were found by the final Codex review. The owner decided to record them as documented limits for the POC rather than fix them. Each has a runnable module, tracked in `cmd/bedrock/audit_test.go` `TestKnownLimits` and skipped with its limit ID. On each one the analyzer currently reports PASS (exit 0) while a real request to `/private` answers 200 unauthenticated.
+
+| ID | Limit | Modules | Fix hint |
+| --- | --- | --- | --- |
+| **L1** | **A factory's reference to itself is exempt.** A router-returning function or method that passes itself, or its own bound method value, to a dependency as a callback is not flagged. The factory-value check skips references from a function to itself (`internal/analyze/audit.go`, the `f != fn` condition). The dependency can later call the saved factory and register unseen routes on the router it returns, for example `dep.SaveFactory(NewAPI)` inside `NewAPI`, or `dep.SaveFactory(s.NewAPI)` inside `(S).NewAPI`. | `self_callback`, `self_method_callback` | Remove the self-reference exemption for non-callee operands. Ordinary direct recursion is already distinguished, because the callee operand of a direct call is excluded. |
+| **L2** | **Dependency linkname targets naming module methods are not matched.** A dependency's `//go:linkname` target is compared verbatim against SSA function names, and the two differ for methods: the linker spells it `example.com/probe.S.NewAPI`, SSA spells it `(example.com/probe.S).NewAPI`. So a dependency-only linkname to a value-receiver factory method does not mark it exposed. | `dependency_link_method` | Match directives against canonical linker identities derived from method objects, including receiver identity (pointer or value), rather than raw SSA `String()` values. |
+
+**Consequence.** `require_middleware` is **advisory against adversarial code**, meaning dependencies or `//go:linkname` that deliberately obtain and mutate module-created routers. It is sound for module code in the supported form when no such adversarial dependency is present. CI enforcement claims must say so (policy contract, section 6.2; plan section 9).
+
 ## 3. Handlers and the direct wrapper form
 
 A **direct handler** is one of the following:

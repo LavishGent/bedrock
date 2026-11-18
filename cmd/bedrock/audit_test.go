@@ -1061,3 +1061,67 @@ func newRouter() *chi.Mux { return chi.NewRouter() }
 func API() http.Handler { return dep.Run() }`}},
 	})
 }
+
+// Known limits (routers/README.md, "Known limits"). These runnable modules
+// are tracked here, skipped with their limit ID: the analyzer currently
+// reports PASS (exit 0) while /private answers 200 unauthenticated. Remove
+// the t.Skip when a limit is fixed; each then asserts exit 2.
+func TestKnownLimits(t *testing.T) {
+	depSaved := depBase + `
+var saved func() http.Handler
+
+// SaveFactory keeps a factory for later.
+func SaveFactory(f func() http.Handler) { saved = f }
+
+// RunSaved calls the saved factory and registers /private on its router.
+func RunSaved() http.Handler { r := saved(); SetupHTTPAny(r); return r }
+`
+	limits := []struct {
+		id string
+		c  customCase
+	}{
+		{"L1", customCase{name: "self_callback", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depSaved,
+			"probe.go": strings.Replace(probeAuthHeader, `"net/http"`, `"net/http"
+	"net/http/httptest"`, 1) + `
+func NewAPI() http.Handler {
+	dep.SaveFactory(NewAPI)
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+func API() http.Handler { s := httptest.NewServer(NewAPI()); s.Close(); return dep.RunSaved() }`}}},
+		{"L1", customCase{name: "self_method_callback", wantExit: 2, proof: serveProof, files: map[string]string{"dep/dep.go": depSaved,
+			"probe.go": strings.Replace(probeAuthHeader, `"net/http"`, `"net/http"
+	"net/http/httptest"`, 1) + `
+type S struct{}
+func (s S) NewAPI() http.Handler {
+	dep.SaveFactory(s.NewAPI)
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+func API() http.Handler { s := httptest.NewServer((S{}).NewAPI()); s.Close(); return dep.RunSaved() }`}}},
+		{"L2", customCase{name: "dependency_link_method", wantExit: 2, proof: serveProof, files: map[string]string{
+			"dep/dep.go": depBase + `
+//go:linkname hiddenFactory example.com/probe.S.NewAPI
+func hiddenFactory(struct{}) http.Handler
+
+// RunHiddenFactory reaches a module factory method by linkname.
+func RunHiddenFactory() http.Handler { r := hiddenFactory(struct{}{}); SetupHTTPAny(r); return r }
+`,
+			"probe.go": probeAuthHeader + `
+type S struct{}
+func (S) NewAPI() http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/safe", Auth(http.HandlerFunc(h)))
+	return m
+}
+func API() http.Handler { return dep.RunHiddenFactory() }`}}},
+	}
+	for _, l := range limits {
+		t.Run(l.id+"/"+l.c.name, func(t *testing.T) {
+			t.Skip("known limit " + l.id + " (routers/README.md, Known limits): analyzer reports PASS; tracked, not fixed in the POC")
+			runCustomCases(t, []customCase{l.c})
+		})
+	}
+}

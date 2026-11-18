@@ -409,3 +409,14 @@ testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIO
 repeat runs (demo/violating, testdata/routerrules; reports + shards): byte-identical
 schemacheck: exit 0 over 388 documents, 0 failures
 ```
+
+## Final review: documented limits (owner decision)
+
+The final Codex review of `fae5790`/`072a5df` found two residual classes. The owner decided to **record them as limits, not fix them**:
+
+- **L1:** factory self-reference callbacks are exempt from the factory-value check.
+- **L2:** dependency linkname targets naming module methods are not matched, because linker and SSA names differ.
+
+They are listed with their fix hints in `../routers/README.md` ("Known limits"). The three runnable modules (`self_callback`, `self_method_callback`, `dependency_link_method`) are tracked as skipped tests in `cmd/bedrock/audit_test.go` `TestKnownLimits`, each skipped with its limit ID.
+
+As a consequence, `require_middleware` is stated to be **advisory against adversarial code** (dependencies or linkname mutating module-created routers) in the policy contract (section 6.2) and the plan (section 9). It is sound for the supported form without such code.

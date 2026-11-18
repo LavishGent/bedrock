@@ -158,6 +158,8 @@ Further details:
 
 ### 6.2 `require_middleware`
 
+> **Advisory against adversarial code.** `require_middleware` is sound for module code written in the supported router form (router matrix, section 2) when no adversarial dependency is present. Against adversarial code, meaning dependencies or `//go:linkname` that deliberately obtain and mutate module-created routers, it is **advisory**: the two known limits L1 and L2 in the router matrix ("Known limits") can let such code register routes the analyzer does not see. CI enforcement claims for this rule must state this. Dependency changes should be reviewed under the trust-boundary controls (plan section 9).
+
 | Key | Type | Required | Default |
 | --- | --- | --- | --- |
 | `middleware` | concept name | yes | none |
