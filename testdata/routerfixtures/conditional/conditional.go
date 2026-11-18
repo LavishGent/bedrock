@@ -76,9 +76,11 @@ func register(r chi.Router) {
 	r.Get("/helper", ok) // want unsupported_router_form
 }
 
-// Helper passes a router to a helper that registers on it.
+// Helper passes a router to an audited module helper whose parameter is a
+// router: the pass is allowed, and the registration inside register (on a
+// parameter, so of unknown identity) carries the diagnostic.
 func Helper() http.Handler {
-	r := chi.NewRouter() // want unsupported_router_form
+	r := chi.NewRouter()
 	register(r)
 	return r
 }

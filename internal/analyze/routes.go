@@ -132,6 +132,9 @@ type extractor struct {
 	parents    map[string]*ssa.Function  // closure parent ID -> function (for package initializers)
 	fnByID     map[string]*ssa.Function  // every module function with a body, by symbol ID
 	module     map[string]bool           // module package paths (analyzed for routes)
+	// routerUnderlying are the underlying types of http.ServeMux and chi.Mux:
+	// a defined type with one of them is convertible to a router.
+	routerUnderlying []types.Type
 	wrappers   map[string]facts.Symbol   // $bound wrapper ID -> symbol (owner set later)
 }
 
@@ -214,6 +217,8 @@ func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) 
 			x.process(fn, nil)
 		}
 	}
+	x.routerUnderlying = routerUnderlyingTypes(all)
+	x.audit(fns)
 	return x
 }
 
@@ -464,10 +469,6 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 		env[fn.Params[0]] = param
 	}
 	uncond := unconditional(fn)
-	var owned []ssa.Value // router values created here (escape check)
-	if param != nil && len(fn.Params) > 0 {
-		owned = append(owned, fn.Params[0])
-	}
 	lookup := func(v ssa.Value) *router {
 		v = peel(v)
 		if isDefaultMux(v) {
@@ -518,7 +519,6 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 						}
 						r.base = r
 						env[call] = r
-						owned = append(owned, call)
 						continue
 					}
 				}
@@ -564,13 +564,11 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 				child := x.with(fn, unit, r, o.args[0], ci, cond, loc)
 				if call, ok := ins.(*ssa.Call); ok && child != nil {
 					env[call] = child
-					owned = append(owned, call)
 				}
 			case o.name == "Group":
 				child := x.with(fn, unit, r, nil, ci, false, loc)
 				if call, ok := ins.(*ssa.Call); ok {
 					env[call] = child
-					owned = append(owned, call)
 				}
 				x.body(fn, unit, child, o.args[len(o.args)-1], cond, loc, "Group")
 			case o.name == "Route":
@@ -585,7 +583,6 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 					sub.base = sub
 					if call, ok := ins.(*ssa.Call); ok {
 						env[call] = sub
-						owned = append(owned, call)
 					}
 					x.body(fn, unit, sub, o.args[len(o.args)-1], cond, loc, "Route")
 				}
@@ -594,11 +591,6 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 			default:
 				x.diag(CatIdentity, unit, fn, "unsupported_router_form", "chi "+o.name+" is not recognized by the router matrix v1", loc)
 			}
-		}
-	}
-	for _, v := range owned {
-		if why := escapes(v, map[ssa.Value]bool{}); why != "" {
-			x.diag(CatIdentity, unit, fn, "unsupported_router_form", "a router value escapes ("+why+"); routes registered elsewhere on it cannot be identified", x.pos(fn, v.Pos()))
 		}
 	}
 }
@@ -1086,92 +1078,6 @@ func (x *extractor) register(fn *ssa.Function, unit string, r *router, o *op, co
 	} else if hv != nil && rt.Fact.HandlerSym == nil {
 		x.diag(CatHandler, unit, fn, "unresolved_dynamic_route", o.name+" handler is not a direct handler", loc, rt)
 	}
-}
-
-// escapes reports why a router value is used other than as allowed: a
-// registration receiver, returned, the handler of ListenAndServe/Serve, or
-// the Handler field of an http.Server.
-func escapes(v ssa.Value, seen map[ssa.Value]bool) string {
-	return escapesProven(v, seen, true)
-}
-
-// escapesProven walks the uses of a router value. proven means the value's
-// concrete (dynamic) type is still known to be the recognized router type
-// (*http.ServeMux or a chi router): only then is ServeHTTP through an
-// interface read-only. A conversion to another defined type (type Mux
-// http.ServeMux with its own methods) changes the method set and escapes;
-// after a phi merge the dynamic type is no longer proven.
-func escapesProven(v ssa.Value, seen map[ssa.Value]bool, proven bool) string {
-	if seen[v] || v.Referrers() == nil {
-		return ""
-	}
-	seen[v] = true
-	for _, ref := range *v.Referrers() {
-		switch t := ref.(type) {
-		case *ssa.DebugRef, *ssa.Return:
-		case *ssa.ChangeType:
-			if !isServeMux(t.Type()) && !isChiRouterType(t.Type()) {
-				return "converted to " + t.Type().String() + ", a different defined type with its own methods"
-			}
-			if why := escapesProven(t, seen, proven); why != "" {
-				return why
-			}
-		case *ssa.Phi:
-			// A merged router: registrations through it are diagnosed at
-			// their receiver; its dynamic type is no longer proven.
-			if why := escapesProven(t, seen, false); why != "" {
-				return why
-			}
-		case *ssa.MakeInterface:
-			if why := escapesProven(t, seen, proven); why != "" {
-				return why
-			}
-		case *ssa.ChangeInterface:
-			if why := escapesProven(t, seen, proven); why != "" {
-				return why
-			}
-		case *ssa.Store:
-			if fa, ok := t.Addr.(*ssa.FieldAddr); ok && t.Val == v && isHTTPServerHandlerField(fa) {
-				continue
-			}
-			return "stored"
-		case ssa.CallInstruction:
-			c := t.Common()
-			if o := classify(c); o != nil && !o.isFunc && o.recv == v {
-				continue
-			}
-			if c.IsInvoke() && c.Value == v {
-				// Only a recognized chi operation (classified above) or the
-				// read-only ServeHTTP is allowed through an interface; any
-				// other interface (interface{ Handle(...) }) hides a
-				// registration whose identity cannot be checked.
-				if c.Method.Name() == "ServeHTTP" && proven {
-					continue
-				}
-				return "called through interface method " + c.Method.FullName() + " on a value whose concrete type is not proven to be the router"
-			}
-			if callee := c.StaticCallee(); callee != nil {
-				if obj, _ := callee.Object().(*types.Func); obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == httpPath {
-					switch obj.Name() {
-					case "ListenAndServe", "ListenAndServeTLS", "Serve", "ServeTLS":
-						continue
-					case "ServeHTTP", "Handler":
-						// (*http.ServeMux).ServeHTTP / Handler called directly: read-only.
-						if sig := callee.Signature; sig.Recv() != nil && isServeMux(sig.Recv().Type()) && len(c.Args) > 0 && c.Args[0] == v {
-							continue
-						}
-					}
-				}
-				if len(c.Args) > 0 && c.Args[0] == v && callee.Signature.Recv() != nil && isChiRouterType(callee.Signature.Recv().Type()) {
-					continue
-				}
-			}
-			return "passed to a function"
-		default:
-			return fmt.Sprintf("used by %T", ref)
-		}
-	}
-	return ""
 }
 
 func isHTTPServerHandlerField(fa *ssa.FieldAddr) bool {
