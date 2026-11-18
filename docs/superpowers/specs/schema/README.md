@@ -1,4 +1,4 @@
-# Bedrock POC fact and report schema, version 0.3
+# Bedrock POC fact and report schema, version 0.4
 
 **Status:** Pinned in POC step 0 (plan `../2026-11-17-bedrock-poc-plan.md`, sections 3 and 8).
 **Scope:** The Go POC only. The parent spec's multi-language IPC (`../2026-11-15-bedrock-design.md`, section 3) stays the long-term target. This schema is the POC's concrete form of it.
@@ -19,6 +19,9 @@ This README is normative. The JSON Schemas check structure. The rules below cove
 | `examples/report.illustrative.json` | A `VIOLATION` report that also carries an indeterminate diagnostic, plain warnings and three exempted diagnostics. It shows precedence, affected-rule reporting, and assumption counts that reconcile with `exempted_by` attributions. |
 | `examples/report.policy-missing.json`, `report.policy-no-rules.json`, `report.policy-invalid.json` | Policy failures: one diagnostic with relevance `global`, `rules: []`, `INDETERMINATE`, exit 2. |
 | `stdlib-go1.26.11.txt` | The pinned standard-library package inventory (`go list std`, linux/amd64, cgo off), used to check `stdlib` provenance. |
+| `examples/report.demo-clean-step2.json` | Real step 2 output for `demo/clean`. `forbid_import` passes, and the two rules of kinds that step 2 does not evaluate are `INDETERMINATE` through `rule_not_evaluated`, so exit 2. |
+| `examples/shard.unsafe-builtin.json`, `examples/shard.regressmissing-absent-missing.json` | Real shards: `unsafe` as a `builtin` unit, and a governed in-module package that cannot be loaded (`missing`, origin `module`, with its `package_load_error`). |
+| `tools/` | Generators for the hand-written examples and negatives (see `tools/README.md`). |
 | `examples/invalid/*.json` | Negative fixtures. Each must be rejected with the error text recorded in `examples/invalid/expect.json`. |
 
 Validate everything (from the repo root). The test accepts every `examples/*.json` and rejects every `examples/invalid/*.json` for its recorded reason:
@@ -30,10 +33,21 @@ go run ./spike/schemacheck docs/superpowers/specs/schema docs/superpowers/specs/
 
 ## Versioning
 
-Every document has `"schema_version": "0.3"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.3/`. They are identifiers, not fetchable URLs.
+Every document has `"schema_version": "0.4"` and a `kind`. While the POC is `0.x`, any incompatible change bumps the minor version. Readers reject versions they do not know; there is no best-effort parsing. Schema `$id`s live under `https://schemas.bedrock.invalid/poc/0.4/`. They are identifiers, not fetchable URLs.
 
 Changelog:
 
+- **0.4** (step 2 review fixes). These changes are incompatible with 0.3:
+  - **Rules not evaluated (B1).** Every configured rule is listed in `rules[]`. A rule whose kind the running build cannot evaluate gets a global diagnostic of the new kind `rule_not_evaluated`. It has relevance `indeterminate` and affects exactly that rule with the new reason `not_evaluated`. The rule is therefore `INDETERMINATE`, and the run exits 2 unless a real violation gives 1. A report is always emitted. See the example `report.demo-clean-step2.json`.
+  - **Source status (B2).** Units gain the required `source_status`:
+    - `compiled` means `files` is non-empty;
+    - `builtin` means `unsafe` only, with no files;
+    - `missing` means a load failure with no files, plus an error diagnostic.
+
+    `unit.origin` gains `unresolved`, for missing packages outside the module, GOROOT and every dependency. Package identity and import edges are kept for every status. See the examples `shard.unsafe-builtin.json` and `shard.regressmissing-absent-missing.json`.
+  - **Physical import locations (B3).** `import.loc` is the physical position, ignoring `//line` directives, and is nullable. The import edge itself is never dropped.
+  - **Excluded coverage (S4).** The `excluded_packages` and report `packages.excluded` reasons gain `ignored_by_go` (testdata, or names starting with `.` or `_`).
+  - **Assumptions.** Assumptions apply only when a `restrict_concept_to_boundary` rule is actually evaluated: it is listed, no `rule_not_evaluated` names it, and there is no global diagnostic.
 - **0.3** (step 1 review fixes). These changes are incompatible with 0.2:
   - **B1, run-level indeterminacy.** Report diagnostics gain relevance `global` (with `scope: global`, empty `affects_rules`), which drives the verdict to 2 directly. `summary.global_diagnostics` is new. A policy failure means `rules: []`. The `global_failure` reason is removed from `affects_rules`.
   - **S1, assumption attribution.** Report diagnostics gain the required `exempted_by`. When a `restrict_concept_to_boundary` rule is evaluated, both assumptions are listed, even with count 0. Counts must reconcile with `exempted_by`.
@@ -203,12 +217,13 @@ Entry = { s in all shards' symbols : s.in_universe
   | `warning` | Affects no rule, including exempted diagnostics. | Empty `affects_rules`. |
 
 - **`affects_rules`** lists each affected rule with a reason: `policy_config`, `unit_in_scope`, `reachable_from_governed_entry`, `route_registration` or `middleware_chain`. It is non-empty exactly when relevance is `indeterminate`.
+- **Rules this build cannot evaluate** (0.4). A `rule_not_evaluated` diagnostic is `scope: global` with relevance `indeterminate`, and has exactly one `affects_rules` entry, with reason `not_evaluated`. That reason is valid only on this kind. The rule is listed and `INDETERMINATE`, never `PASS`.
 - **Policy failures.** With `policy_missing`, `policy_invalid` or `policy_no_rules`, no rule is evaluated. The report has `rules: []`, `violations: []` and `assumptions: []`, status `INDETERMINATE`, exit 2. See the three `report.policy-*.json` examples.
 - **Rule results**: `rules[].diagnostic_ids` lists the `indeterminate` diagnostics that name the rule, including for rules that also have violations. Global diagnostics are not repeated per rule.
 - **Verdict per rule**: `VIOLATION` if it has violations; else `INDETERMINATE` if it has `diagnostic_ids` **or any global diagnostic exists**; else `PASS`. No rule is `PASS` in a run with a global diagnostic.
 - **Overall verdict**: `VIOLATION`/1 if any violation exists, else `INDETERMINATE`/2 if any `global` or `indeterminate` diagnostic exists, else `PASS`/0. A violation still wins over a global diagnostic, per the verdict table. All diagnostics are always listed. The illustrative report shows this: `VIOLATION` overall, with rule `db-in-repo` indeterminate.
 - **Assumptions (S1)**:
-  - **When listed.** `assumptions` is empty unless a `restrict_concept_to_boundary` rule is evaluated. Then it lists exactly `no_possible_target` and `trusted_stdlib`, sorted and unique, **even when a count is 0**.
+  - **When listed.** `assumptions` is empty unless a `restrict_concept_to_boundary` rule is actually evaluated: it is listed, no `rule_not_evaluated` diagnostic names it, and the run has no global diagnostic. Then it lists exactly `no_possible_target` and `trusted_stdlib`, sorted and unique, **even when a count is 0**.
   - **Counts.** Each exempted diagnostic stays in `diagnostics` with relevance `warning` and `exempted_by` naming its assumption. `exempted_count` must equal the number of diagnostics carrying that `exempted_by`.
   - **Attribution is based on provenance, never on the shape of an import path.** Go allows dotless module paths such as `app/internal/helper`. The evidence is `unit_origin`, which the analyzer copies from the owning unit's loader-derived `unit.origin`. It is required on every exempted diagnostic. A validator cross-checks it against the pinned standard-library inventory `stdlib-<go_version>.txt`, the output of `go list std` under the pinned profile (360 packages for go1.26.11):
     - `trusted_stdlib` requires an unknown-call kind, `unit_origin: stdlib`, and a `unit_id` in the inventory for the report's `build_profile.go_version`.

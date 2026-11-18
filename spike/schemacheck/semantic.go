@@ -123,6 +123,22 @@ func checkShard(d obj) []string {
 	if in, known := inStdlib(shardGoVersion, uid); known && (u["origin"] == "stdlib") != in {
 		c.errf("unit %s: origin %v contradicts the %s standard-library inventory (in inventory: %v)", uid, u["origin"], shardGoVersion, in)
 	}
+	switch u["source_status"] {
+	case "builtin":
+		if !builtinUnits[uid] {
+			c.errf("unit %s: source_status builtin is only valid for %v", uid, keys(builtinUnits))
+		}
+	case "missing":
+		hasErr := false
+		for _, x := range arr(d["diagnostics"]) {
+			if x.(obj)["severity"] == "error" {
+				hasErr = true
+			}
+		}
+		if !hasErr {
+			c.errf("unit %s: source_status missing needs an error diagnostic explaining the load failure", uid)
+		}
+	}
 
 	files := arr(u["files"])
 	c.sortedBy("unit.files", files, func(o obj) string { return str(o["path"]) })
@@ -321,6 +337,10 @@ func checkManifest(d obj) []string {
 // carry its build profile, only its digest; the POC pins one toolchain.
 const shardGoVersion = "go1.26.11"
 
+// builtinUnits are the source-less packages the compiler provides (cgo is
+// disabled by the pinned profile, so "C" never appears).
+var builtinUnits = map[string]bool{"unsafe": true}
+
 // runLevelKinds must have relevance global: they invalidate the whole run.
 var runLevelKinds = map[string]bool{
 	"policy_missing": true, "policy_invalid": true, "policy_no_rules": true,
@@ -403,6 +423,19 @@ func checkReport(d obj) []string {
 		if policyFailureKinds[kind] {
 			policyFailed = true
 		}
+		if kind == "rule_not_evaluated" {
+			ar := arr(x["affects_rules"])
+			if x["scope"] != "global" || x["relevance"] != "indeterminate" || len(ar) != 1 ||
+				ar[0].(obj)["reason"] != "not_evaluated" {
+				c.errf("diagnostic %s: rule_not_evaluated must be global, indeterminate, and affect exactly one rule with reason not_evaluated", id)
+			}
+		} else {
+			for _, a := range arr(x["affects_rules"]) {
+				if a.(obj)["reason"] == "not_evaluated" {
+					c.errf("diagnostic %s: reason not_evaluated is only valid on rule_not_evaluated", id)
+				}
+			}
+		}
 		// S1: exemption attribution must be verifiable from the diagnostic's
 		// provenance (unit_origin, from the loader) cross-checked against the
 		// pinned standard-library inventory.
@@ -441,9 +474,20 @@ func checkReport(d obj) []string {
 	// S1: both assumptions are listed whenever the DB rule kind is evaluated.
 	asm := arr(d["assumptions"])
 	c.sortedBy("assumptions", asm, func(o obj) string { return str(o["id"]) })
+	// A restrict_concept_to_boundary rule is evaluated when it is listed, no
+	// rule_not_evaluated diagnostic names it, and the run did not fail
+	// globally (abort, merge integrity): only then do assumptions apply.
+	notEvaluated := map[string]bool{}
+	for _, x := range diags {
+		if x.(obj)["kind"] == "rule_not_evaluated" {
+			for _, a := range arr(x.(obj)["affects_rules"]) {
+				notEvaluated[str(a.(obj)["rule_id"])] = true
+			}
+		}
+	}
 	evaluatesDB := false
 	for _, r := range rules {
-		if r.(obj)["kind"] == "restrict_concept_to_boundary" {
+		if r.(obj)["kind"] == "restrict_concept_to_boundary" && !notEvaluated[str(r.(obj)["id"])] && global == 0 {
 			evaluatesDB = true
 		}
 	}

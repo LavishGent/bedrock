@@ -1,0 +1,43 @@
+{
+  "schema_version": "0.4",
+  "kind": "unit_shard",
+  "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
+  "unit": {
+    "id": "unsafe",
+    "lang": "go",
+    "origin": "stdlib",
+    "module": null,
+    "dir": "unsafe",
+    "source_status": "builtin",
+    "files": [],
+    "excluded_files": [],
+    "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dep_hashes": []
+  },
+  "symbols": [
+    {
+      "id": "unsafe.Pointer",
+      "unit_id": "unsafe",
+      "kind": "type",
+      "name": "Pointer",
+      "exported": true,
+      "has_body": false,
+      "in_universe": false,
+      "parent_id": null,
+      "origin_id": null,
+      "wrapper_kind": null,
+      "entry_hints": {
+        "is_main": false,
+        "is_init": false,
+        "address_taken": false
+      },
+      "loc": null
+    }
+  ],
+  "external_symbols": [],
+  "imports": [],
+  "call_sites": [],
+  "routes": [],
+  "route_middleware": [],
+  "diagnostics": []
+}

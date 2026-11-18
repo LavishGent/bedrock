@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "kind": "report",
   "tool": {
     "name": "bedrock",
@@ -20,7 +20,7 @@
     "sha256": "sha256:3565d922899a885f828ac3371f9efed1a7ca8a1ba9cae8ea2a8a2e21d06ccae4"
   },
   "inputs": {
-    "manifest_sha256": "sha256:92a93c17accaa71b5cc3b6728e7e36ffa6e5ce7026679f77a7b3d03f86710866",
+    "manifest_sha256": "sha256:2d45c27b333d46c47059d5f3afa0f5a665108998ea1cab100644d84e7d13058a",
     "shard_count": 6
   },
   "assumptions": [

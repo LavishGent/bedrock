@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.bedrock.invalid/poc/0.3/report.schema.json",
+  "$id": "https://schemas.bedrock.invalid/poc/0.4/report.schema.json",
   "title": "Bedrock POC check report",
   "description": "Output of `bedrock check --format json`. Verdict: any violation gives VIOLATION/1; otherwise any diagnostic with relevance global or indeterminate gives INDETERMINATE/2; otherwise PASS/0. Every diagnostic is listed in every case. Rules: README.md.",
   "type": "object",
@@ -216,11 +216,13 @@
                   "build_constraint",
                   "test_only",
                   "outside_module",
+                  "ignored_by_go",
                   "load_error"
                 ]
               }
             }
-          }
+          },
+          "description": "Directories under the module root that hold Go files but are not analyzed, with the reason: build_constraint (no file builds under the profile), test_only (only _test.go files), outside_module (a nested module), ignored_by_go (testdata, or a name starting with . or _). Sorted by id."
         },
         "excluded_files": {
           "type": "array",
@@ -249,7 +251,7 @@
       }
     },
     "rules": {
-      "description": "One entry per policy rule, sorted by id. Empty when the policy itself failed (policy_missing, policy_invalid, policy_no_rules): no rule was evaluated.",
+      "description": "One entry per configured policy rule, sorted by id; a rule whose kind this build cannot evaluate is still listed (INDETERMINATE through its rule_not_evaluated diagnostic). Empty only when the policy itself failed (policy_missing, policy_invalid, policy_no_rules).",
       "type": "array",
       "items": {
         "$ref": "#/$defs/ruleResult"
@@ -645,7 +647,8 @@
                   "unit_in_scope",
                   "reachable_from_governed_entry",
                   "route_registration",
-                  "middleware_chain"
+                  "middleware_chain",
+                  "not_evaluated"
                 ]
               }
             }
@@ -675,7 +678,8 @@
               "enum": [
                 "module",
                 "dependency",
-                "stdlib"
+                "stdlib",
+                "unresolved"
               ]
             }
           ]

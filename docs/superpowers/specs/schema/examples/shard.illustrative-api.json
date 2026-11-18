@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "kind": "unit_shard",
   "build_profile_digest": "sha256:a9908d6256be439025cd8e60c1dbcd535db524ac7f39069c340aad2fd17340cc",
   "unit": {
@@ -8,6 +8,7 @@
     "origin": "module",
     "module": "example.com/app",
     "dir": "internal/api",
+    "source_status": "compiled",
     "files": [
       {
         "path": "internal/api/api.go",
