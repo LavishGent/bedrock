@@ -343,8 +343,10 @@ func TestPolicyRepros(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]struct{ src, kind string }{
-		"malformed-symbol": {strings.Replace(string(good), `"example.com/demo/internal/auth.RequireAuth"`, `"???"`, 1), "policy_invalid"},
-		"empty-rule-array": {"version = 1\nmodule = \"example.com/demo\"\nrule = []\n", "policy_no_rules"},
+		"malformed-symbol":  {strings.Replace(string(good), `"example.com/demo/internal/auth.RequireAuth"`, `"???"`, 1), "policy_invalid"},
+		"empty-rule-array":  {"version = 1\nmodule = \"example.com/demo\"\nrule = []\n", "policy_no_rules"},
+		"superscript-digit": {strings.Replace(string(good), `"example.com/demo/internal/auth.RequireAuth"`, `"example.com/demo/internal/auth.F²"`, 1), "policy_invalid"},
+		"keyword-func":      {strings.Replace(string(good), `"example.com/demo/internal/auth.RequireAuth"`, `"example.com/demo/internal/auth.func"`, 1), "policy_invalid"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

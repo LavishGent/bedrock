@@ -7,6 +7,7 @@ package policy
 import (
 	"errors"
 	"fmt"
+	"go/token"
 	"io/fs"
 	"os"
 	"regexp"
@@ -92,22 +93,36 @@ var (
 	ruleID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
 	methodToken  = regexp.MustCompile(`^[A-Za-z]+$`)
 
-	// symbolIDGrammar is the canonical ID of a function or method a concept
-	// may bind (schema README, Symbol IDs): "importpath.Func",
-	// "(importpath.Type).Method" or "(*importpath.Type).Method". The import
-	// path is "/"-separated elements of letters, digits and ._~+-; names are
-	// Go identifiers. Closures, wrappers and instances are not bindable.
-	symbolIDGrammar = regexp.MustCompile(`^(?:` + importPathRE + `\.` + identRE +
-		`|\(\*?` + importPathRE + `\.` + identRE + `\)\.` + identRE + `)$`)
+	// symbolIDShape splits a bindable symbol ID into import path and names:
+	// "importpath.Func", "(importpath.Type).Method" or
+	// "(*importpath.Type).Method". The import path is "/"-separated elements
+	// of letters, digits and ._~+-. Each name is then checked with
+	// go/token.IsIdentifier, which rejects keywords and non-decimal digits.
+	symbolIDShape = regexp.MustCompile(`^(?:(` + importPathRE + `)\.([^./()*\s]+)` +
+		`|\(\*?(` + importPathRE + `)\.([^./()*\s]+)\)\.([^./()*\s]+))$`)
 )
 
-const (
-	importPathRE = `[\pL\pN_.~+-]+(?:/[\pL\pN_.~+-]+)*`
-	identRE      = `[\pL_][\pL\pN_]*`
-)
+const importPathRE = `[\pL\pN_.~+-]+(?:/[\pL\pN_.~+-]+)*`
 
 // ValidSymbolID reports whether s is a canonical bindable symbol ID.
-func ValidSymbolID(s string) bool { return symbolIDGrammar.MatchString(s) }
+func ValidSymbolID(s string) bool {
+	m := symbolIDShape.FindStringSubmatch(s)
+	if m == nil {
+		return false
+	}
+	var names []string
+	if m[1] != "" {
+		names = []string{m[2]}
+	} else {
+		names = []string{m[4], m[5]}
+	}
+	for _, n := range names {
+		if !token.IsIdentifier(n) {
+			return false
+		}
+	}
+	return true
+}
 
 // policyLoc returns the location of a policy parse error.
 func policyLoc(path string, line, col int) *facts.Location {

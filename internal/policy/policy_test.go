@@ -60,6 +60,8 @@ func TestFailClosed(t *testing.T) {
 		{"empty rule array", strings.Replace(base, "module = \"example.com/demo\"\n", "module = \"example.com/demo\"\nrule = []\n", 1), "policy_no_rules", "no [[rule]]"},
 		{"malformed symbol ???", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"???"`, 1) + rule, "policy_invalid", `malformed symbol ID "???"`},
 		{"symbol without package", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"RequireAuth"`, 1) + rule, "policy_invalid", "malformed symbol ID"},
+		{"superscript digit F²", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"example.com/demo/internal/auth.F²"`, 1) + rule, "policy_invalid", "malformed symbol ID"},
+		{"keyword func", strings.Replace(base, `"example.com/demo/internal/auth.RequireAuth"`, `"example.com/demo/internal/auth.func"`, 1) + rule, "policy_invalid", "malformed symbol ID"},
 		{"unused concept malformed", base + "[concept.\"spare\"]\nsymbols = [\"(example.com/x.T.M\"]\n" + rule, "policy_invalid", "malformed symbol ID"},
 		{"empty concept", base + "[concept.\"x.y\"]\n" + rule, "policy_invalid", "needs a non-empty packs or symbols"},
 		{"version", strings.Replace(base, "version = 1", "version = 2", 1) + rule, "policy_invalid", "version must be 1"},
@@ -116,7 +118,8 @@ func TestSymbolIDGrammar(t *testing.T) {
 	good := []string{"example.com/demo/internal/auth.RequireAuth", "(*database/sql.DB).QueryContext",
 		"(example.com/x.T).M", "app/internal/helper.Run", "net/http.HandlerFunc"}
 	bad := []string{"???", "", "RequireAuth", "example.com/x.", "(example.com/x.T.M", "(*example.com/x.T).", "example.com/x.Run$1",
-		"(*example.com/x.T).M$bound", "example.com/x.Map[int]", " example.com/x.F", "example.com/x.F "}
+		"(*example.com/x.T).M$bound", "example.com/x.Map[int]", " example.com/x.F", "example.com/x.F ",
+		"example.com/demo/internal/auth.F²", "example.com/demo/internal/auth.func", "(example.com/x.type).M", "(*example.com/x.T).range"}
 	for _, s := range good {
 		if !ValidSymbolID(s) {
 			t.Errorf("ValidSymbolID(%q) = false, want true", s)
