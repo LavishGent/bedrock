@@ -72,6 +72,9 @@ func SetupHTTPAny(v any) { v.(*http.ServeMux).HandleFunc("/private", open) }
 // OpenMux returns a ServeMux with /private already registered.
 func OpenMux() *http.ServeMux { m := http.NewServeMux(); m.HandleFunc("/private", open); return m }
 
+// OpenHandler returns an unprotected mux behind http.Handler.
+func OpenHandler() http.Handler { return OpenMux() }
+
 // OpenMuxErr is OpenMux with an error result.
 func OpenMuxErr() (*http.ServeMux, error) { return OpenMux(), nil }
 
@@ -327,7 +330,18 @@ func Run() error {
 	srv := &http.Server{Addr: ":8081", Handler: NewAdmin()}
 	return srv.ListenAndServe()
 }`, "", "", 0, ""},
-		{"serve-helper-and-direct-servehttp", `
+		{"single-function-direct-servehttp", `
+func Run(w http.ResponseWriter, req *http.Request) error {
+	r := chi.NewRouter()
+	r.Use(Auth)
+	r.Get("/x", h)
+	r.ServeHTTP(w, req)
+	var hd http.Handler = r
+	hd.ServeHTTP(w, req)
+	return http.ListenAndServe(":8080", r)
+}`, "", "", 0, ""},
+		// Helpers that take routers are outside the supported form.
+		{"serve-helper-rejected", `
 func NewAPI() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(Auth)
@@ -335,13 +349,7 @@ func NewAPI() *chi.Mux {
 	return r
 }
 func serve(hd http.Handler) error { return http.ListenAndServe(":8080", hd) }
-func Run(w http.ResponseWriter, req *http.Request) error {
-	r := NewAPI()
-	r.ServeHTTP(w, req)
-	var hd http.Handler = r
-	hd.ServeHTTP(w, req)
-	return serve(r)
-}`, "", "", 0, ""},
+func Run() error { return serve(NewAPI()) }`, "", "", 2, ""},
 		{"httptest-server", `
 func NewAPI() http.Handler {
 	r := chi.NewRouter()
@@ -510,7 +518,7 @@ func Run() error {
 	srv.Handler = r
 	return srv.ListenAndServe()
 }`},
-		{name: "closed-helper-factory", wantExit: 0, code: `
+		{name: "helper-factory-rejected", wantExit: 2, code: `
 func build() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(Auth)
@@ -653,4 +661,117 @@ func API() http.Handler { return dep.Make(dep.OpenMux) }`),
 		nonPass("D10-dependency-method", `
 func API() http.Handler { return dep.Factory{}.Mux() }`),
 	})
+}
+
+const linknameDep = `
+//go:linkname hidden example.com/probe.hiddenServe
+func hidden(m *http.ServeMux) *httptest.Server
+
+// RunHidden serves an unprotected mux through a module function it reaches
+// by go:linkname.
+func RunHidden() *httptest.Server { return hidden(OpenMux()) }
+`
+
+// The seven fresh variants of the review of 1acec5b (mixed factory flows,
+// mixed helper call sites, open factories, recursion, variadic factory,
+// go:linkname): each was exit 0 / PASS with a real HTTP 200.
+func TestSupportedFormFreshVariants(t *testing.T) {
+	runAuditCases(t, []auditCase{
+		{name: "mixed_factory", wantExit: 2, proof: serverProof, code: `
+func factory(flag bool) http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/private", Auth(http.HandlerFunc(h)))
+	if flag {
+		return m
+	}
+	return dep.OpenHandler()
+}
+func Start() *httptest.Server { return httptest.NewServer(factory(false)) }`},
+		{name: "mixed_closed_helper", wantExit: 2, proof: serverProof, code: `
+func serve(hd http.Handler) *httptest.Server { return httptest.NewServer(hd) }
+func Safe() *httptest.Server {
+	m := http.NewServeMux()
+	m.Handle("/private", Auth(http.HandlerFunc(h)))
+	return serve(m)
+}
+func Start() *httptest.Server { return serve(dep.OpenHandler()) }`},
+		{name: "mixed_open_factory", wantExit: 2, proof: serverProof, code: `
+func factory(in http.Handler, flag bool) http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/private", Auth(http.HandlerFunc(h)))
+	if flag {
+		return m
+	}
+	return in
+}
+func Start() *httptest.Server { return httptest.NewServer(factory(dep.OpenHandler(), false)) }`},
+		{name: "open_external_param", wantExit: 2, code: `
+func Factory(in http.Handler, flag bool) http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/private", Auth(http.HandlerFunc(h)))
+	if flag {
+		return m
+	}
+	return in
+}
+func Start(in http.Handler) *httptest.Server { return httptest.NewServer(Factory(in, false)) }`, proof: `	s := Start(dep.OpenHandler())
+	defer s.Close()
+	rsp, err := s.Client().Get(s.URL + "/private")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsp.Body.Close()
+	expectOpen(t, rsp.StatusCode)`},
+		{name: "recursive_factory_unknown", wantExit: 2, proof: serverProof, code: `
+func a(n int) http.Handler {
+	if n == 0 {
+		return dep.OpenHandler()
+	}
+	return z(n - 1)
+}
+func z(n int) http.Handler {
+	if n == 999 {
+		return chi.NewRouter()
+	}
+	return a(n)
+}
+func Start() *httptest.Server { return httptest.NewServer(z(2)) }`},
+		{name: "closed_variadic", wantExit: 2, proof: serverProof, code: `
+func factory(v ...http.Handler) http.Handler {
+	if len(v) == 0 {
+		return chi.NewRouter()
+	}
+	return v[0]
+}
+func Start() *httptest.Server { return httptest.NewServer(factory(dep.OpenHandler())) }`},
+	})
+}
+
+// go:linkname: a module function reachable from a dependency by linkname is
+// outside the supported form (its callers cannot be seen).
+func TestSupportedFormLinkname(t *testing.T) {
+	sum, err := os.ReadFile("../../testdata/routerrules/go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := writeModule(t, auditGoMod, map[string]string{
+		"dep/go.mod": depGoMod, "dep/go.sum": string(sum),
+		"dep/dep.go": strings.Replace(depSource, `"net/http"
+	"sync"`, `"net/http"
+	"net/http/httptest"
+	"sync"`, 1) + linknameDep,
+		"probe.go": auditHeader + `
+//go:linkname serve example.com/probe.hiddenServe
+func serve(m *http.ServeMux) *httptest.Server { return httptest.NewServer(m) }
+
+func Start() *httptest.Server { return dep.RunHidden() }
+`,
+		"probe_test.go": proofBody(serverProof),
+	})
+	httpProof(t, dir)
+	code, raw, facts := run(t, dir)
+	if code != 2 || !strings.Contains(string(raw), "go:linkname") {
+		t.Fatalf("exit %d; want 2 with the go:linkname diagnostic:\n%s", code, raw)
+	}
+	schemacheck(t, append(shardsIn(t, facts), writeReport(t, facts, raw))...)
 }

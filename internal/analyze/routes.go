@@ -135,7 +135,7 @@ type extractor struct {
 	// routerUnderlying are the underlying types of http.ServeMux and chi.Mux:
 	// a defined type with one of them is convertible to a router.
 	routerUnderlying []types.Type
-	wrappers   map[string]facts.Symbol   // $bound wrapper ID -> symbol (owner set later)
+	wrappers         map[string]facts.Symbol // $bound wrapper ID -> symbol (owner set later)
 }
 
 // extractRoutes builds SSA for the well-typed module packages and extracts
@@ -218,7 +218,7 @@ func extractRoutes(all []*packages.Package, module map[string]bool, l *locator) 
 		}
 	}
 	x.routerUnderlying = routerUnderlyingTypes(all)
-	x.audit(fns)
+	x.audit(fns, linknameExposed(all, module))
 	return x
 }
 
@@ -550,7 +550,11 @@ func (x *extractor) process(fn *ssa.Function, param *router) {
 					x.diag(CatIdentity, unit, fn, "unsupported_router_form", "chi.RegisterMethod changes the set of valid methods globally (unsupported)", loc)
 					continue
 				}
-				// http.Handle / http.HandleFunc use DefaultServeMux.
+				// http.Handle / http.HandleFunc use DefaultServeMux: the route is
+				// recorded, but DefaultServeMux is a global router outside the
+				// supported form, so it is also unknown identity.
+				x.diag(CatIdentity, unit, fn, "unsupported_router_form",
+					"http."+o.name+" registers on DefaultServeMux, a global router outside the supported form", loc)
 				x.register(fn, unit, x.defaultMuxRouter(), o, cond, loc)
 				continue
 			}

@@ -159,10 +159,12 @@ func Setup() http.Handler {
 	return r
 }`, 2, "unsupported_router_form"},
 		// S2: registration in init(): the owning init symbol is emitted.
+		// DefaultServeMux (http.Handle) is a global router outside the
+		// supported form: protected or not, it is unknown identity.
 		{"S2-init-registration", `
 func init() {
 	http.Handle("/x", Auth(http.HandlerFunc(h)))
-}`, 0, ""},
+}`, 2, "unsupported_router_form"},
 		{"S2-init-unprotected", `
 func init() {
 	http.HandleFunc("/open", h)
