@@ -33,7 +33,7 @@
     "routeId": {
       "description": "route:<unit ID>:<METHOD or *>:<normalized path, empty if unresolved>#<duplicate index>",
       "type": "string",
-      "pattern": "^route:[^\\s:]+:([A-Z]+|\\*):[^\\s]*#(0|[1-9][0-9]*)$"
+      "pattern": "^route:[^\\s:]+:([A-Za-z]+|\\*):[^\\s]*#(0|[1-9][0-9]*)$"
     },
     "diagnosticId": {
       "type": "string",

@@ -167,7 +167,7 @@ Further details:
 
 **Route patterns** (`except_routes`) have the form `[METHOD ]PATH`:
 
-- `METHOD` is an upper-case token (`GET`, `POST`, ...) or omitted.
+- `METHOD` matches `^[A-Za-z]+$` and is compared **case-sensitively** with the route's normalized method (router matrix, section 5). It may be omitted. chi methods are always upper case; net/http keeps the case as written, so `get /x` is a different route from `GET /x`.
 - `PATH` starts with `/` and is split on `/` into segments. The segments are literal text, `*` or `**`, with the same meaning as in section 3. A trailing `/` is significant.
 - Patterns match the **normalized** route path (router matrix, Normalization). Parameter segments such as `{id}` are compared as literal text.
 - **Method matching:**

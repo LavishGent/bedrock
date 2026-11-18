@@ -312,8 +312,8 @@
         "unit_id": { "$ref": "common.schema.json#/$defs/unitId" },
         "router": { "enum": ["chi", "net_http"] },
         "method": {
-          "description": "Upper-case HTTP method, or null when the route matches any method.",
-          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[A-Z]+$" }]
+          "description": "HTTP method as normalized by the router matrix (chi: upper-cased by chi; net/http: case preserved as written), or null when the route matches any method. Bounded to letters (router matrix, section 5).",
+          "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[A-Za-z]+$" }]
         },
         "path": {
           "description": "Normalized full path (prefixes from Route/Group applied), or null when unresolved (paired with an unresolved_dynamic_route diagnostic; the route ID then uses an empty path).",
