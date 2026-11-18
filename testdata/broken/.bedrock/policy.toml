@@ -1,0 +1,20 @@
+# Fixture policy for testdata/broken (policy contract v1). Its only job is to
+# put example.com/broken/b, which fails to load, inside a governed scope so the
+# load failure is relevant and the verdict is INDETERMINATE (2), not PASS.
+
+version = 1
+module = "example.com/broken"
+
+[boundary.all]
+packages = ["example.com/broken/**"]
+
+[boundary.a_root]
+packages = ["example.com/broken/a"]
+
+[[rule]]
+id = "no-a-root-import"
+kind = "forbid_import"
+scope = "all"
+target = "a_root"
+message = "Packages must not import example.com/broken/a (fixture rule; nothing does)."
+remediation.message = "Not expected to fire: this rule exists to govern example.com/broken/b."

@@ -18,26 +18,28 @@
 
 ## Build, vet and test
 
-Run with go1.26.11:
+Run with go1.26.11 (rerun after the review fixes):
 
 ```
 $ cd demo/clean && go build ./... && go vet ./... && go test -count=1 ./...
 ?   	example.com/demo/cmd/demo	[no test files]
-ok  	example.com/demo/internal/auth	0.350s
+ok  	example.com/demo/internal/auth	0.170s
 ?   	example.com/demo/internal/auth/private	[no test files]
 ?   	example.com/demo/internal/billing	[no test files]
 ?   	example.com/demo/internal/handler	[no test files]
 ?   	example.com/demo/internal/repo	[no test files]
-ok  	example.com/demo/internal/server	0.232s
+ok  	example.com/demo/internal/server	0.292s
 $ cd demo/violating && go build ./... && go vet ./... && go test -count=1 ./...
 ?   	example.com/demo/cmd/demo	[no test files]
-ok  	example.com/demo/internal/auth	0.304s
+ok  	example.com/demo/internal/auth	0.165s
 ?   	example.com/demo/internal/auth/private	[no test files]
 ?   	example.com/demo/internal/billing	[no test files]
 ?   	example.com/demo/internal/handler	[no test files]
 ?   	example.com/demo/internal/repo	[no test files]
-ok  	example.com/demo/internal/server	0.188s
+ok  	example.com/demo/internal/server	0.276s
 ```
+
+`demo/violating/internal/server/sqlstub_test.go` holds a test-only `database/sql` driver (S5). `TestExportThroughDB` uses it to assert the authenticated `Export` success path, including the exact rows returned, plus the DB-failure path (500) and the unauthenticated path (401). The driver is in a `_test.go` file, so it belongs to no analysis unit and cannot add or hide `database.query` facts.
 
 ## The auth tests catch a no-op `RequireAuth`
 
@@ -75,6 +77,8 @@ The auth tests sit under `/demo/*/internal/auth/`, which CODEOWNERS protects tog
 
 ## Broken fixture fails to load as intended
 
+`testdata/broken` has its own fixture policy, `testdata/broken/.bedrock/policy.toml` (S6). Its `module` matches and its scope governs `example.com/broken/b`. `testdata/broken/README.md` gives the invocation (`bedrock check --repo testdata/broken --format json`) and the exact assertions: `package_load_error` on `example.com/broken/b` at `b/b.go:6:8`, affecting rule `no-a-root-import` with reason `unit_in_scope`, exit 2, no violations, and no `policy_*` diagnostic.
+
 ```
 $ cd testdata/broken && go build ./...
 package example.com/broken/b
@@ -84,7 +88,9 @@ go build exit=1
 
 ## Seeded violations (exactly one per rule kind)
 
-`diff -r demo/clean demo/violating` has no other semantic changes. The rest of the diff is plumbing: `handler.New` takes a `*sql.DB`, and one server test case is dropped because `Export` now needs a real DB.
+`diff -r demo/clean demo/violating` has no other semantic changes. The rest of the diff is plumbing and tests: `handler.New` takes a `*sql.DB`, and the violating server tests use the test-only stub driver for `Export`.
+
+**Before showing a copy to an agent, strip the `// VIOLATION ...` comments.** They mark the seeded violations for humans and tests. An agent shown `demo/violating` (plan decision 1, the by-hand demo) must find the violations from the Bedrock report alone, so the comments have to be removed from that copy, for example with `sed -i '' 's| // VIOLATION .*$||'`. Otherwise the demo measures nothing.
 
 | Rule | Kind | Location | What |
 | --- | --- | --- | --- |
