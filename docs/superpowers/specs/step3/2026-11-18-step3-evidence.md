@@ -84,3 +84,36 @@ route:example.com/demo/internal/server:POST:/api/v1/items#0 -> (*example.com/dem
 - **Projection:** chain uncertainty reaches only the rules that govern the route and do not except it, while unknown identity reaches every rule (`TestRouteDiagProjection`).
 
 Every emitted shard and report passes `spike/schemacheck`, including all 388 documents from the two repeat-run fixtures above and the full `testdata/routerfixtures` run (`TestRouterFixtureShardsValidate`). Repeat runs are byte-identical. `go build`, `go vet` and `go test` pass in the root module, both demos and `testdata/routerfixtures`.
+
+## Review fixes (Codex step 3 review)
+
+Every fix fails closed. Each Codex probe runs as an isolated one-file module in `cmd/bedrock` `TestReviewProbes`, because unknown registration identity is module-wide.
+
+| Item | Probe | Before | Now |
+| --- | --- | --- | --- |
+| **B1** alias `type R = chi.Router` | `B1-alias-route-param`, `B1-alias-variable` | routes missed, PASS | routes recognized, violation (exit 1) |
+| **B1** registration through `interface{ Handle(string, http.Handler) }` | `B1-foreign-interface` | PASS | `unsupported_router_form`, exit 2 |
+| **B2** `ms[0] = Open` before `r.Use(ms...)` | `B2-overwrite-use` | `Auth` credited, PASS | `unsupported_middleware_form`, exit 2 |
+| **B2** conditional overwrite | `B2-conditional-overwrite-use` | PASS | exit 2 |
+| **B2** the same through `With` | `B2-overwrite-with` | PASS | exit 2 |
+| **B3** `var register = http.HandleFunc` | `B3-package-function-alias` | route missed, PASS | `unsupported_router_form`, exit 2 |
+| **B3** registration function passed as an argument | `B3-passed-as-argument` | PASS | exit 2 |
+| **B3** method expression stored in a global | `B3-method-expression-escapes` | PASS | exit 2 |
+| **B3** local alias or method expression called directly | `B3-local-indirect`, `B3-method-expression` | (SSA makes it a static call) | recognized precisely, violation (exit 1) |
+| **S1** middleware typed with `type H = http.Handler` | `TestAliasMiddlewareConcept`, `S1-alias-middleware-type` | rejected as `policy_invalid` | accepted (exit 0); a genuinely wrong signature is still `policy_invalid` |
+| **S2** registration in `init()` | `S2-init-*`, fixture `testdata/routerinit` (`TestRouterInitFixture`) | `registered_in` referenced an unemitted symbol, so the shard was invalid | `pkg.init`, `pkg.init#1` and `pkg.init#2` emitted; shards pass schemacheck |
+
+Results after the fixes. `demo/clean` and `demo/violating` are unchanged, and all other fixtures are as before:
+
+```
+demo/clean: exit 2 INDETERMINATE | rules [('auth-private-import', 'PASS'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'PASS')] | violations [] | relevant [('rule_not_evaluated', None)]
+demo/violating: exit 1 VIOLATION | rules [('auth-private-import', 'VIOLATION'), ('db-in-repo', 'INDETERMINATE'), ('routes-require-auth', 'VIOLATION')] | violations [('auth-private-import', 'internal/billing/billing.go:9'), ('routes-require-auth', 'internal/server/server.go:18')] | relevant [('rule_not_evaluated', None)]
+testdata/routerrules: exit 1 VIOLATION | rules [('needs-audit', 'VIOLATION'), ('needs-auth', 'VIOLATION')] | violations [('needs-audit', 'server/server.go:25'), ('needs-audit', 'server/server.go:32'), ('needs-auth', 'server/server.go:32')] | relevant []
+testdata/routerinit: exit 1 VIOLATION | rules [('needs-auth', 'VIOLATION')] | violations [('needs-auth', 'routerinit.go:19')] | relevant []
+testdata/broken: exit 2 INDETERMINATE | rules [('no-a-root-import', 'INDETERMINATE')] | violations [] | relevant [('package_load_error', 'example.com/broken/b')]
+testdata/regress: exit 1 VIOLATION | rules [('no-forbidden-import', 'VIOLATION'), ('no-unsafe', 'VIOLATION')] | violations [('no-forbidden-import', 'lined/lined.go:7'), ('no-unsafe', 'unsafeuse/unsafeuse.go:5')] | relevant []
+testdata/regress-missing: exit 2 INDETERMINATE | rules [('no-user-import', 'INDETERMINATE')] | violations [] | relevant [('parse_or_type_error', 'example.com/regressmissing/user'), ('package_load_error', 'example.com/regressmissing/absent')]
+testdata/regress-underscore: exit 1 VIOLATION | rules [('no-helper-import', 'VIOLATION')] | violations [('no-helper-import', 'app.go:6')] | relevant []
+repeat runs (demo/violating, testdata/routerinit; reports + shards): byte-identical
+schemacheck: exit 0 over 385 documents, 0 failures
+```

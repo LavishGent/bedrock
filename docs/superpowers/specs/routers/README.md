@@ -369,6 +369,15 @@ r.Get("/x", h.X)                                      // receiver merged at a ph
 - A registration must run on every normal path of its function. Its block must dominate every return and must not sit in a cycle. Otherwise the registration gets `unsupported_router_form`, the same treatment as "under a condition or in a loop". That includes a registration after an early `return`.
 - A middleware concept may bind only functions of type `func(http.Handler) http.Handler`, and no packs. Anything else is `policy_invalid` (policy contract, section 5). This is checked after loading, because it needs types.
 
+**Fail-closed rules added after the step 3 review.** Each has a probe in `cmd/bedrock/probes_test.go`:
+
+- **Aliases.** Type aliases are resolved before matching, so `type R = chi.Router` is a chi router and `type H = http.Handler` is a valid middleware type.
+- **Foreign interfaces.** A tracked router may flow into an interface only for a recognized chi operation, the read-only `ServeHTTP`, a return, `ListenAndServe` and its variants, or an `http.Server.Handler` field. Anything else, such as `var reg interface{ Handle(string, http.Handler) } = mux`, is an escape: `unsupported_router_form` with module-wide reach.
+- **Registration-shaped calls.** A call through a function value or a non-chi interface whose signature is (string pattern, handler) cannot be resolved to a router. It is `unsupported_router_form`, module-wide.
+- **Registration APIs used as values.** `http.Handle`/`HandleFunc`, the `ServeMux` methods, and chi's registration methods (including method expressions and thunks) are allowed only as the callee of a direct call. Used as a value (`var register = http.HandleFunc`, passed as an argument, stored), they give `unsupported_router_form`, module-wide. A local alias called in the same function (`f := http.HandleFunc; f(...)`) compiles to a direct call and is recognized precisely.
+- **Middleware lists** are credited only from the compiler's in-place varargs array. Each element must be stored exactly once, in the call's block before the call, and the array and slice may have no other use. A user-created slice (`ms := []func(...){Auth}; r.Use(ms...)`), an overwritten element (conditional or not), or a spread or computed slice gives `unsupported_middleware_form`, so the chain is uncertain and nothing is credited. This applies to `Use` and `With`.
+- **Owning symbols.** Every function named by `registered_in` or by a diagnostic is an emitted symbol of its unit. That includes the synthesized `pkg.init` and declared `pkg.init#n`, since go/types does not declare them (fixture `testdata/routerinit`).
+
 Run all fixtures:
 
 ```sh
